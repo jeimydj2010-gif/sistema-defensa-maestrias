@@ -11,19 +11,58 @@ const SUPABASE_ANON_KEY = 'sb_publishable_dYKgp7TCRukLL-ei99dHPA_k2SaZuRW';
 const LOGO_URL = 'https://i.imgur.com/9aGsanI.jpeg';
 const NOTA_MINIMA_APROBACION = 7;
 
+const MODULOS_SISTEMA = [
+ {key:'dashboard',label:'Dashboard KPI',url:'dashboard.html',icon:'📊'},
+ {key:'periodos',label:'Periodos académicos',url:'periodos.html',icon:'📅'},
+ {key:'estudiantes',label:'Estudiantes',url:'estudiantes.html',icon:'🎓'},
+ {key:'profesores',label:'Profesores',url:'profesores.html',icon:'👩‍🏫'},
+ {key:'temas',label:'Temas de proyecto',url:'temas.html',icon:'📚'},
+ {key:'defensas',label:'Defensas y jurados',url:'defensas.html',icon:'⚖️'},
+ {key:'jurado',label:'Acceso jurado',url:'jurado.html',icon:'📝'},
+ {key:'actas',label:'Actas',url:'actas.html',icon:'📄'},
+ {key:'reportes',label:'Reportes',url:'reportes.html',icon:'📥'},
+ {key:'estadisticas',label:'Estadísticas',url:'estadisticas.html',icon:'📈'},
+ {key:'usuarios',label:'Usuarios/Roles',url:'usuarios.html',icon:'👤'}
+];
+function parseModulos(value){
+ if(!value) return [];
+ if(Array.isArray(value)) return value;
+ if(typeof value==='string'){
+   if(value==='todos') return MODULOS_SISTEMA.map(m=>m.key);
+   try{ const v=JSON.parse(value); if(Array.isArray(v)) return v; }catch(e){}
+   return value.split(',').map(x=>x.trim()).filter(Boolean);
+ }
+ return [];
+}
+function userIsAdminFull(u){ return u && (String(u.rol||'').toLowerCase().includes('admin') || String(u.modulos||'')==='todos'); }
+function allowedModules(u){
+ if(!u) return [];
+ if(u.tipo==='jurado') return ['jurado'];
+ if(userIsAdminFull(u)) return MODULOS_SISTEMA.map(m=>m.key);
+ const propios=parseModulos(u.modulos);
+ return propios.length?propios:['dashboard'];
+}
+function currentModuleKey(){
+ const file=(location.pathname.split('/').pop()||'index.html').replace('.html','');
+ return file==='index'?'login':file;
+}
+function canAccessModule(key){ const u=getUser(); if(!u) return false; return allowedModules(u).includes(key); }
+function defaultUrlForUser(u){ const keys=allowedModules(u); const first=MODULOS_SISTEMA.find(m=>keys.includes(m.key)); return first?first.url:'index.html'; }
+
+
 let supabaseClient = null;
 const DEMO = SUPABASE_URL.includes('TU-PROYECTO') || SUPABASE_ANON_KEY.includes('TU-ANON');
 if(!DEMO && window.supabase){ supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }
 const seed = {
- roles:[{id:1,nombre:'Administrador',estado:'activo'},{id:2,nombre:'Coordinador',estado:'activo'},{id:3,nombre:'Consulta',estado:'activo'}],
- usuarios:[{id:1,nombre:'Administrador',correo:'admin@cordillera.edu.ec',password:'admin123',rol:'Administrador',estado:'activo'}],
+ roles:[{id:1,nombre:'Administrador',descripcion:'Acceso total al sistema',modulos_default:'todos',estado:'activo'},{id:2,nombre:'Coordinador',descripcion:'Gestión académica y reportes',modulos_default:'dashboard,periodos,estudiantes,profesores,temas,defensas,actas,reportes,estadisticas',estado:'activo'},{id:3,nombre:'Consulta',descripcion:'Solo consulta y reportes',modulos_default:'dashboard,reportes,estadisticas',estado:'activo'},{id:4,nombre:'Secretaría',descripcion:'Actas, estudiantes y reportes',modulos_default:'dashboard,estudiantes,actas,reportes',estado:'activo'}],
+ usuarios:[{id:1,nombre:'Administrador',correo:'admin@cordillera.edu.ec',password:'admin123',rol:'Administrador',modulos:'todos',estado:'activo'}],
  periodos:[{id:1,nombre:'Maestrias 2026 - Cohorte I',fecha_inicio:'2026-01-01',fecha_fin:'2026-12-31',estado:'activo'}],
  estudiantes:[{id:1,periodo_id:1,cedula:'1720000001',nombres:'Ana Gabriela',apellidos:'Perez Mora',correo:'ana.perez@cordillera.edu.ec',telefono:'0999999991',teams:'ana.perez@cordillera.edu.ec',programa:'Maestria en Gestion Educativa',cohorte:'I',estado:'activo'},{id:2,periodo_id:1,cedula:'1720000002',nombres:'Carlos Andres',apellidos:'Lopez Vera',correo:'carlos.lopez@cordillera.edu.ec',telefono:'0999999992',teams:'carlos.lopez@cordillera.edu.ec',programa:'Maestria en Administracion',cohorte:'I',estado:'activo'}],
  profesores:[{id:1,cedula:'1711111111',nombres:'Maria Fernanda',apellidos:'Gomez Ruiz',correo:'maria.gomez@cordillera.edu.ec',telefono:'0989442980',titulo:'Mgtr.',especialidad:'Investigacion',estado:'activo'},{id:2,cedula:'1722222222',nombres:'Luis Alberto',apellidos:'Castro Diaz',correo:'luis.castro@cordillera.edu.ec',telefono:'0989442981',titulo:'PhD.',especialidad:'Metodologia',estado:'activo'},{id:3,cedula:'1733333333',nombres:'Sofia Elizabeth',apellidos:'Mena Cruz',correo:'sofia.mena@cordillera.edu.ec',telefono:'0989442982',titulo:'Mgtr.',especialidad:'Gestion',estado:'activo'}],
  temas:[{id:1,periodo_id:1,estudiante_id:1,tutor_id:1,tema:'Modelo de gestion academica para programas de posgrado',linea:'Gestion educativa',estado:'asignado'},{id:2,periodo_id:1,estudiante_id:2,tutor_id:2,tema:'Innovacion administrativa para procesos institucionales',linea:'Gestion organizacional',estado:'asignado'}],
  defensas:[{id:1,periodo_id:1,estudiante_id:1,tema_id:1,fecha_defensa:'2026-08-15',hora_defensa:'10:00',modalidad:'virtual',enlace:'https://teams.microsoft.com',aula:'',estado:'programada'},{id:2,periodo_id:1,estudiante_id:2,tema_id:2,fecha_defensa:'2026-08-16',hora_defensa:'11:00',modalidad:'presencial',enlace:'',aula:'Sala 1',estado:'programada'}],
  defensa_jurados:[{id:1,defensa_id:1,profesor_id:1,rol_jurado:'presidente',estado:'pendiente'},{id:2,defensa_id:1,profesor_id:2,rol_jurado:'vocal1',estado:'pendiente'},{id:3,defensa_id:1,profesor_id:3,rol_jurado:'vocal2',estado:'pendiente'},{id:4,defensa_id:2,profesor_id:1,rol_jurado:'presidente',estado:'pendiente'},{id:5,defensa_id:2,profesor_id:2,rol_jurado:'vocal1',estado:'pendiente'},{id:6,defensa_id:2,profesor_id:3,rol_jurado:'vocal2',estado:'pendiente'}],
- calificaciones:[], plantillas_actas:[{id:1,nombre:'Acta institucional',contenido_html:'<h2>ACTA DE DEFENSA DE MAESTRIA</h2><p>Estudiante: {{NOMBRE_ESTUDIANTE}}</p><p>Tema: {{TEMA_PROYECTO}}</p><p>Nota final: {{NOTA_FINAL}}</p><p>Estado: {{ESTADO_FINAL}}</p>',estado:'activo'}], actas:[], auditoria:[]
+ calificaciones:[], invitaciones:[], plantillas_actas:[{id:1,nombre:'Acta institucional',contenido_html:'<h2>ACTA DE DEFENSA DE MAESTRIA</h2><p>Estudiante: {{NOMBRE_ESTUDIANTE}}</p><p>Tema: {{TEMA_PROYECTO}}</p><p>Nota final: {{NOTA_FINAL}}</p><p>Estado: {{ESTADO_FINAL}}</p>',estado:'activo'}], actas:[], auditoria:[]
 };
 function loadLocal(){let d=localStorage.getItem('defensasDemoDB'); if(!d){localStorage.setItem('defensasDemoDB',JSON.stringify(seed)); return JSON.parse(JSON.stringify(seed));} return JSON.parse(d)}
 function saveLocal(d){localStorage.setItem('defensasDemoDB',JSON.stringify(d))}
@@ -35,28 +74,81 @@ async function audit(accion,modulo,descripcion){ try{await insert('auditoria',{u
 function getUser(){return JSON.parse(sessionStorage.getItem('usuario')||'null')}
 function setUser(u){sessionStorage.setItem('usuario',JSON.stringify(u))}
 function logout(){sessionStorage.clear(); location.href='index.html'}
-function requireAdmin(){ if(!getUser()){ location.href='index.html'; }}
+function requireAdmin(){
+ const u=getUser();
+ if(!u){ location.href='index.html'; return false;}
+ if(u.tipo==='jurado'){
+   alert('Acceso restringido: el docente solo puede ingresar al módulo de jurado.');
+   location.href='jurado.html';
+   return false;
+ }
+ const key=currentModuleKey();
+ if(key!=='login' && !canAccessModule(key)){
+   alert('No tiene permisos para acceder a este módulo.');
+   location.href=defaultUrlForUser(u);
+   return false;
+ }
+ return true;
+}
+function requireJurado(){ const u=getUser(); if(!u){ location.href='index.html'; return false;} if(u.tipo!=='jurado' && u.tipo!=='admin'){ location.href='index.html'; return false;} return true; }
 function money(n){return Number(n||0).toFixed(2)}
 function badge(text,type='ok'){return `<span class="badge ${type}">${text}</span>`}
 function csvDownload(filename, rows){ const csv=rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download=filename; a.click(); }
 async function calcularCierre(defensaId){ const c=(await all('calificaciones')).filter(x=>String(x.defensa_id)===String(defensaId)); if(c.length>=3){ const prom=c.reduce((s,x)=>s+Number(x.nota),0)/c.length; await update('defensas',defensaId,{estado:'finalizada',nota_final:prom,estado_final:prom>=NOTA_MINIMA_APROBACION?'aprobado':'reprobado'}); } }
 
-function pageShell(title){document.write(`
+function pageShell(title){const u=getUser(); const juradoOnly=u&&u.tipo==='jurado'; const menuAdmin=`<a href="dashboard.html">📊 Dashboard</a><a href="periodos.html">📅 Periodos</a><a href="estudiantes.html">🎓 Estudiantes</a><a href="profesores.html">👩‍🏫 Profesores</a><a href="temas.html">📚 Temas</a><a href="defensas.html">⚖️ Defensas</a><a href="jurado.html">📝 Acceso Jurado</a><a href="actas.html">📄 Actas</a><a href="reportes.html">📥 Reportes</a><a href="estadisticas.html">📈 Estadisticas</a><a href="usuarios.html">👤 Usuarios/Roles</a>`; const menuJurado=`<a href="jurado.html">📝 Mis defensas asignadas</a>`; document.write(`
 <div class="app"><aside class="sidebar" id="sidebar"><div class="brand"><img src="${LOGO_URL}"><h2>Sistema de Defensas</h2><span>Instituto Tecnologico Universitario Cordillera</span></div><nav class="menu">
-<a href="dashboard.html">📊 Dashboard</a><a href="periodos.html">📅 Periodos</a><a href="estudiantes.html">🎓 Estudiantes</a><a href="profesores.html">👩‍🏫 Profesores</a><a href="temas.html">📚 Temas</a><a href="defensas.html">⚖️ Defensas</a><a href="jurado.html">📝 Acceso Jurado</a><a href="actas.html">📄 Actas</a><a href="reportes.html">📥 Reportes</a><a href="estadisticas.html">📈 Estadisticas</a><a href="usuarios.html">👤 Usuarios/Roles</a><a href="#" onclick="logout()">🚪 Salir</a>
-</nav></aside><main class="main"><div class="topbar"><button class="btn btn-secondary mobile-menu" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button><h1>${title}</h1><div class="muted">${DEMO?'Modo demo local':'Supabase conectado'}</div></div><div class="content" id="app"></div></main></div>`)}
+${juradoOnly?menuJurado:menuAdmin}<a href="#" onclick="logout()">🚪 Salir</a>
+</nav></aside><main class="main"><div class="topbar"><button class="btn btn-secondary mobile-menu" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button><h1>${title}</h1><div class="muted">${juradoOnly?'Acceso docente':'Supabase conectado'}</div></div><div class="content" id="app"></div></main></div>`)}
 function modal(title,html){closeModal();document.body.insertAdjacentHTML('beforeend',`<div class="modal" id="modal"><div class="modal-card"><div class="modal-head"><h2>${title}</h2><button class="close" type="button" onclick="closeModal()">×</button></div>${html}</div></div>`)}
 function closeModal(){const m=document.getElementById('modal');if(!m)return;try{if(m.parentNode){m.parentNode.removeChild(m)}}catch(e){m.style.display='none';m.id='modal_cerrado_'+Date.now();}}
 function getVal(id){return document.getElementById(id).value.trim()}
-async function renderCrud({table,title,fields,columns}){ requireAdmin(); const app=document.getElementById('app'); const data=await all(table); app.innerHTML=`<div class="card"><div class="toolbar"><button class="btn btn-primary" onclick="openCrud('${table}')">➕ Nuevo</button><button class="btn btn-outline" onclick="exportTable('${table}')">📥 Exportar CSV</button><input id="buscar" placeholder="Buscar..." oninput="filterTable()"></div><div class="table-wrap"><table id="mainTable"><thead><tr>${columns.map(c=>`<th>${c.label}</th>`).join('')}<th>Acciones</th></tr></thead><tbody>${data.map(r=>`<tr>${columns.map(c=>`<td>${c.render?c.render(r):r[c.key]??''}</td>`).join('')}<td><button class="btn btn-secondary" onclick="openCrud('${table}',${r.id})">✏️</button> <button class="btn btn-danger" onclick="del('${table}',${r.id})">🗑️</button></td></tr>`).join('')}</tbody></table></div></div>`; window.__crud={table,title,fields,columns,data}; }
+async function renderCrud({table,title,fields,columns}){ if(!requireAdmin()) return; const app=document.getElementById('app'); const data=await all(table); const importBtns=(table==='estudiantes'||table==='profesores')?`<button class="btn btn-success" onclick="openImportModal('${table}')">📤 Importar XLS/XLSX</button><button class="btn btn-outline" onclick="descargarModelo('${table}')">📄 Descargar modelo</button>`:''; app.innerHTML=`<div class="card"><div class="toolbar"><button class="btn btn-primary" onclick="openCrud('${table}')">➕ Nuevo</button>${importBtns}<button class="btn btn-outline" onclick="exportTable('${table}')">📥 Exportar CSV</button><input id="buscar" placeholder="Buscar..." oninput="filterTable()"></div><div class="table-wrap"><table id="mainTable"><thead><tr>${columns.map(c=>`<th>${c.label}</th>`).join('')}<th>Acciones</th></tr></thead><tbody>${data.map(r=>`<tr>${columns.map(c=>`<td>${c.render?c.render(r):r[c.key]??''}</td>`).join('')}<td><button class="btn btn-secondary" onclick="openCrud('${table}',${r.id})">✏️</button> <button class="btn btn-danger" onclick="del('${table}',${r.id})">🗑️</button></td></tr>`).join('')}</tbody></table></div></div>`; window.__crud={table,title,fields,columns,data}; }
 window.openCrud=async function(table,id=null){ const cfg=window.__crud; const row=id?cfg.data.find(x=>String(x.id)===String(id)):{}; const html=`<form onsubmit="saveCrud(event,'${table}',${id||'null'})"><div class="grid grid-2">${cfg.fields.map(f=>`<div class="form-group"><label>${f.label}</label>${f.type==='textarea'?`<textarea id="f_${f.key}">${row[f.key]||''}</textarea>`:`<input id="f_${f.key}" type="${f.type||'text'}" value="${row[f.key]||''}">`}</div>`).join('')}</div><button class="btn btn-primary">Guardar</button></form>`; modal(id?'Editar registro':'Nuevo registro',html); }
 window.saveCrud=async function(e,table,id){ e.preventDefault(); const cfg=window.__crud; const row={}; cfg.fields.forEach(f=>row[f.key]=getVal('f_'+f.key)); if(id){await update(table,id,row); await audit('editar',table,'Edito registro '+id)}else{await insert(table,row); await audit('crear',table,'Creo registro')} location.reload(); }
 window.del=async function(table,id){ if(confirm('Desea eliminar este registro?')){ await removeRow(table,id); await audit('eliminar',table,'Elimino registro '+id); location.reload(); }}
 window.exportTable=async function(table){ const data=await all(table); const keys=Object.keys(data[0]||{}); csvDownload(table+'.csv',[keys,...data.map(r=>keys.map(k=>r[k]))]); }
 window.filterTable=function(){ const q=getVal('buscar').toLowerCase(); document.querySelectorAll('#mainTable tbody tr').forEach(tr=>tr.style.display=tr.innerText.toLowerCase().includes(q)?'':'none'); }
+
+const MODELOS_IMPORTACION={
+ estudiantes:['periodo_id','cedula','nombres','apellidos','correo','telefono','teams','programa','cohorte','estado'],
+ profesores:['cedula','nombres','apellidos','correo','telefono','titulo','especialidad','estado']
+};
+function descargarModelo(table){ const headers=MODELOS_IMPORTACION[table]||[]; const ejemplo=table==='estudiantes'?[1,'1720000001','NOMBRES','APELLIDOS','correo@cordillera.edu.ec','0999999999','correo@cordillera.edu.ec','Maestria Tecnologica','I','activo']:['1711111111','NOMBRES','APELLIDOS','docente@cordillera.edu.ec','0999999999','Mgtr.','Investigacion','activo']; csvDownload('modelo_'+table+'.csv',[headers,ejemplo]); }
+function openImportModal(table){ modal('Importar '+table+' desde XLS/XLSX',`<div class="note"><strong>Formato requerido:</strong> el archivo debe tener encabezados: ${(MODELOS_IMPORTACION[table]||[]).join(', ')}. También puede usar el botón Descargar modelo.</div><input type="file" id="xlsFile" accept=".xlsx,.xls,.csv"><div class="toolbar" style="margin-top:14px"><button class="btn btn-primary" onclick="procesarImportacion('${table}')">Importar archivo</button><button class="btn btn-outline" onclick="descargarModelo('${table}')">Descargar modelo</button></div><div id="importResult" class="muted"></div>`); }
+async function procesarImportacion(table){ const file=document.getElementById('xlsFile').files[0]; if(!file){alert('Seleccione un archivo XLS, XLSX o CSV');return} if(!window.XLSX){alert('No se cargó la librería XLSX. Verifique conexión a Internet.');return} const buf=await file.arrayBuffer(); const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; const rows=XLSX.utils.sheet_to_json(ws,{defval:''}); const headers=MODELOS_IMPORTACION[table]; let ok=0,err=[]; for(const [i,r] of rows.entries()){ let row={}; headers.forEach(h=>row[h]=String(r[h]??r[h.toUpperCase()]??r[h.replace('_',' ')]??'').trim()); if(table==='estudiantes' && (!row.cedula||!row.nombres||!row.apellidos)){err.push('Fila '+(i+2)+': faltan cedula, nombres o apellidos'); continue;} if(table==='profesores' && (!row.cedula||!row.nombres||!row.apellidos)){err.push('Fila '+(i+2)+': faltan cedula, nombres o apellidos'); continue;} if(!row.estado) row.estado='activo'; try{await insert(table,row); ok++;}catch(e){err.push('Fila '+(i+2)+': '+e.message)} } await audit('importar',table,'Importados '+ok+' registros desde XLS'); document.getElementById('importResult').innerHTML=`<p><strong>${ok}</strong> registros importados.</p>${err.length?'<p style="color:#E47E3D">'+err.join('<br>')+'</p>':''}`; setTimeout(()=>location.reload(),1200); }
+
 async function lookup(){ const [est,prof,tem,def,jur,cal]=await Promise.all(['estudiantes','profesores','temas','defensas','defensa_jurados','calificaciones'].map(all)); return {est,prof,tem,def,jur,cal}; }
 
 </script></head><body><script>pageShell('Usuarios')</script><script>
-renderCrud({table:'usuarios',title:'Usuarios',fields:[{key:'nombre',label:'Nombre'},{key:'correo',label:'Correo'},{key:'password',label:'Contraseña'},{key:'rol',label:'Rol'},{key:'estado',label:'Estado'}],columns:[{key:'nombre',label:'Nombre'},{key:'correo',label:'Correo'},{key:'rol',label:'Rol'},{key:'estado',label:'Estado',render:r=>badge(r.estado,r.estado==='activo'?'ok':'warn')}]});
-
+(async()=>{ if(!requireAdmin()) return; renderUsuariosRoles(); })();
+async function renderUsuariosRoles(){
+ const app=document.getElementById('app');
+ const usuarios=await all('usuarios');
+ const roles=await all('roles');
+ const invitaciones=await all('invitaciones').catch(()=>[]);
+ app.innerHTML=`<div class="grid grid-2">
+  <div class="card"><h2>Usuarios del sistema</h2><div class="toolbar"><button class="btn btn-primary" onclick="openUser()">➕ Nuevo usuario</button><button class="btn btn-success" onclick="openInvite()">🔗 Crear invitación</button><input id="buscarUsuarios" placeholder="Buscar usuario..." oninput="filtrarUsuarios()"></div><div class="table-wrap"><table id="tablaUsuarios"><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Módulos</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>${usuarios.map(u=>`<tr><td>${u.nombre||''}</td><td>${u.correo||''}</td><td>${u.rol||''}</td><td>${modulosTexto(u.modulos)}</td><td>${badge(u.estado,u.estado==='activo'?'ok':'warn')}</td><td><button class="btn btn-secondary" onclick="openUser(${u.id})">✏️</button> <button class="btn btn-danger" onclick="deleteUser(${u.id})">🗑️</button></td></tr>`).join('')}</tbody></table></div></div>
+  <div class="card"><h2>Roles y módulos</h2><div class="toolbar"><button class="btn btn-primary" onclick="openRole()">➕ Nuevo rol</button></div><div class="table-wrap"><table><thead><tr><th>Rol</th><th>Módulos por defecto</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>${roles.map(r=>`<tr><td><strong>${r.nombre}</strong><br><span class="muted">${r.descripcion||''}</span></td><td>${modulosTexto(r.modulos_default)}</td><td>${badge(r.estado,r.estado==='activo'?'ok':'warn')}</td><td><button class="btn btn-secondary" onclick="openRole(${r.id})">✏️</button> <button class="btn btn-danger" onclick="deleteRole(${r.id})">🗑️</button></td></tr>`).join('')}</tbody></table></div></div>
+ </div>
+ <div class="card" style="margin-top:18px"><h2>URLs de invitación</h2><p class="muted">Cree enlaces para que cada usuario active su cuenta según el rol y módulos asignados.</p><div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Módulos</th><th>Estado</th><th>URL</th><th>Acciones</th></tr></thead><tbody>${invitaciones.map(i=>`<tr><td>${i.nombre||''}</td><td>${i.correo||''}</td><td>${i.rol||''}</td><td>${modulosTexto(i.modulos)}</td><td>${badge(i.estado||'pendiente',(i.estado||'pendiente')==='usado'?'ok':'warn')}</td><td><input value="${urlInvitacion(i.token)}" readonly onclick="this.select()"></td><td><button class="btn btn-outline" onclick="copiar('${urlInvitacion(i.token)}')">Copiar</button> <button class="btn btn-danger" onclick="deleteInvite(${i.id})">🗑️</button></td></tr>`).join('')||'<tr><td colspan="7">Sin invitaciones generadas.</td></tr>'}</tbody></table></div></div>`;
+}
+function modulosTexto(v){ const mods=parseModulos(v); if(String(v)==='todos') return '<strong>Todos</strong>'; if(!mods.length) return '<span class="muted">Sin módulos</span>'; return mods.map(k=>{const m=MODULOS_SISTEMA.find(x=>x.key===k);return m?m.label:k}).join(', '); }
+function modulesChecks(selected=[]){ selected=parseModulos(selected); const todos=String(selected)==='todos'; return `<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="mod_todos" ${todos?'checked':''} onchange="toggleTodosModulos(this)"> Acceso total</label><div class="grid grid-2" style="margin-top:8px">${MODULOS_SISTEMA.map(m=>`<label style="display:flex;gap:8px;align-items:center"><input class="modcheck" type="checkbox" value="${m.key}" ${todos||selected.includes(m.key)?'checked':''}> ${m.icon} ${m.label}</label>`).join('')}</div>`; }
+function getSelectedModules(){ if(document.getElementById('mod_todos')?.checked) return 'todos'; return [...document.querySelectorAll('.modcheck:checked')].map(x=>x.value).join(','); }
+function toggleTodosModulos(chk){ document.querySelectorAll('.modcheck').forEach(x=>x.checked=chk.checked); }
+async function openUser(id=null){ const usuarios=await all('usuarios'); const roles=await all('roles'); const u=id?usuarios.find(x=>String(x.id)===String(id)):{}; modal(id?'Editar usuario':'Nuevo usuario',`<form onsubmit="saveUser(event,${id||'null'})"><div class="grid grid-2"><div class="form-group"><label>Nombre</label><input id="u_nombre" value="${u.nombre||''}" required></div><div class="form-group"><label>Correo</label><input id="u_correo" value="${u.correo||''}" required></div><div class="form-group"><label>Contraseña</label><input id="u_password" type="text" value="${u.password||''}" required></div><div class="form-group"><label>Rol</label><select id="u_rol" onchange="aplicarRolDefault()">${roles.map(r=>`<option value="${r.nombre}" data-modulos="${r.modulos_default||''}" ${u.rol===r.nombre?'selected':''}>${r.nombre}</option>`).join('')}</select></div><div class="form-group"><label>Estado</label><select id="u_estado"><option ${u.estado==='activo'?'selected':''}>activo</option><option ${u.estado==='inactivo'?'selected':''}>inactivo</option></select></div></div><div class="form-group"><label>Módulos permitidos</label>${modulesChecks(u.modulos||'')}</div><button class="btn btn-primary">Guardar usuario</button></form>`); }
+function aplicarRolDefault(){ const opt=document.getElementById('u_rol').selectedOptions[0]; const mods=opt?.dataset.modulos||''; document.getElementById('mod_todos').checked=mods==='todos'; document.querySelectorAll('.modcheck').forEach(x=>x.checked=mods==='todos'||parseModulos(mods).includes(x.value)); }
+async function saveUser(e,id){ e.preventDefault(); const row={nombre:getVal('u_nombre'),correo:getVal('u_correo'),password:getVal('u_password'),rol:getVal('u_rol'),modulos:getSelectedModules(),estado:getVal('u_estado')}; if(id){await update('usuarios',id,row); await audit('editar','usuarios','Editó usuario '+id)}else{await insert('usuarios',row); await audit('crear','usuarios','Creó usuario '+row.correo)} location.reload(); }
+async function deleteUser(id){ if(confirm('¿Eliminar usuario?')){ await removeRow('usuarios',id); await audit('eliminar','usuarios','Eliminó usuario '+id); location.reload(); } }
+async function openRole(id=null){ const roles=await all('roles'); const r=id?roles.find(x=>String(x.id)===String(id)):{}; modal(id?'Editar rol':'Nuevo rol',`<form onsubmit="saveRole(event,${id||'null'})"><div class="grid grid-2"><div class="form-group"><label>Nombre del rol</label><input id="r_nombre" value="${r.nombre||''}" required></div><div class="form-group"><label>Estado</label><select id="r_estado"><option ${r.estado==='activo'?'selected':''}>activo</option><option ${r.estado==='inactivo'?'selected':''}>inactivo</option></select></div></div><div class="form-group"><label>Descripción</label><textarea id="r_descripcion">${r.descripcion||''}</textarea></div><div class="form-group"><label>Módulos por defecto del rol</label>${modulesChecks(r.modulos_default||'')}</div><button class="btn btn-primary">Guardar rol</button></form>`); }
+async function saveRole(e,id){ e.preventDefault(); const row={nombre:getVal('r_nombre'),descripcion:getVal('r_descripcion'),modulos_default:getSelectedModules(),estado:getVal('r_estado')}; if(id){await update('roles',id,row); await audit('editar','roles','Editó rol '+id)}else{await insert('roles',row); await audit('crear','roles','Creó rol '+row.nombre)} location.reload(); }
+async function deleteRole(id){ if(confirm('¿Eliminar rol?')){ await removeRow('roles',id); await audit('eliminar','roles','Eliminó rol '+id); location.reload(); } }
+async function openInvite(){ const roles=await all('roles'); modal('Crear URL de invitación',`<form onsubmit="saveInvite(event)"><div class="grid grid-2"><div class="form-group"><label>Nombre</label><input id="i_nombre" required></div><div class="form-group"><label>Correo</label><input id="i_correo" required></div><div class="form-group"><label>Rol</label><select id="i_rol" onchange="aplicarRolInvitacion()">${roles.map(r=>`<option value="${r.nombre}" data-modulos="${r.modulos_default||''}">${r.nombre}</option>`).join('')}</select></div><div class="form-group"><label>Estado</label><select id="i_estado"><option>pendiente</option><option>inactivo</option></select></div></div><div class="form-group"><label>Módulos asignados por invitación</label>${modulesChecks(roles[0]?.modulos_default||'')}</div><button class="btn btn-success">Generar invitación</button></form>`); }
+function aplicarRolInvitacion(){ const opt=document.getElementById('i_rol').selectedOptions[0]; const mods=opt?.dataset.modulos||''; document.getElementById('mod_todos').checked=mods==='todos'; document.querySelectorAll('.modcheck').forEach(x=>x.checked=mods==='todos'||parseModulos(mods).includes(x.value)); }
+async function saveInvite(e){ e.preventDefault(); const token='INV-'+Date.now()+'-'+Math.random().toString(36).slice(2,8).toUpperCase(); const row={token,nombre:getVal('i_nombre'),correo:getVal('i_correo'),rol:getVal('i_rol'),modulos:getSelectedModules(),estado:getVal('i_estado'),fecha_creacion:new Date().toISOString()}; await insert('invitaciones',row); await audit('crear','invitaciones','Creó invitación '+row.correo); alert('Invitación creada. Copie el enlace desde la tabla.'); location.reload(); }
+function urlInvitacion(token){ return location.href.replace('usuarios.html','index.html').split('?')[0]+'?invite='+encodeURIComponent(token||''); }
+function copiar(txt){ navigator.clipboard?.writeText(txt); alert('URL copiada'); }
+async function deleteInvite(id){ if(confirm('¿Eliminar invitación?')){ await removeRow('invitaciones',id); await audit('eliminar','invitaciones','Eliminó invitación '+id); location.reload(); } }
+function filtrarUsuarios(){ const q=getVal('buscarUsuarios').toLowerCase(); document.querySelectorAll('#tablaUsuarios tbody tr').forEach(tr=>tr.style.display=tr.innerText.toLowerCase().includes(q)?'':'none'); }
 </script></body></html>

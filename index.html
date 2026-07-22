@@ -11,19 +11,58 @@ const SUPABASE_ANON_KEY = 'sb_publishable_dYKgp7TCRukLL-ei99dHPA_k2SaZuRW';
 const LOGO_URL = 'https://i.imgur.com/9aGsanI.jpeg';
 const NOTA_MINIMA_APROBACION = 7;
 
+const MODULOS_SISTEMA = [
+ {key:'dashboard',label:'Dashboard KPI',url:'dashboard.html',icon:'📊'},
+ {key:'periodos',label:'Periodos académicos',url:'periodos.html',icon:'📅'},
+ {key:'estudiantes',label:'Estudiantes',url:'estudiantes.html',icon:'🎓'},
+ {key:'profesores',label:'Profesores',url:'profesores.html',icon:'👩‍🏫'},
+ {key:'temas',label:'Temas de proyecto',url:'temas.html',icon:'📚'},
+ {key:'defensas',label:'Defensas y jurados',url:'defensas.html',icon:'⚖️'},
+ {key:'jurado',label:'Acceso jurado',url:'jurado.html',icon:'📝'},
+ {key:'actas',label:'Actas',url:'actas.html',icon:'📄'},
+ {key:'reportes',label:'Reportes',url:'reportes.html',icon:'📥'},
+ {key:'estadisticas',label:'Estadísticas',url:'estadisticas.html',icon:'📈'},
+ {key:'usuarios',label:'Usuarios/Roles',url:'usuarios.html',icon:'👤'}
+];
+function parseModulos(value){
+ if(!value) return [];
+ if(Array.isArray(value)) return value;
+ if(typeof value==='string'){
+   if(value==='todos') return MODULOS_SISTEMA.map(m=>m.key);
+   try{ const v=JSON.parse(value); if(Array.isArray(v)) return v; }catch(e){}
+   return value.split(',').map(x=>x.trim()).filter(Boolean);
+ }
+ return [];
+}
+function userIsAdminFull(u){ return u && (String(u.rol||'').toLowerCase().includes('admin') || String(u.modulos||'')==='todos'); }
+function allowedModules(u){
+ if(!u) return [];
+ if(u.tipo==='jurado') return ['jurado'];
+ if(userIsAdminFull(u)) return MODULOS_SISTEMA.map(m=>m.key);
+ const propios=parseModulos(u.modulos);
+ return propios.length?propios:['dashboard'];
+}
+function currentModuleKey(){
+ const file=(location.pathname.split('/').pop()||'index.html').replace('.html','');
+ return file==='index'?'login':file;
+}
+function canAccessModule(key){ const u=getUser(); if(!u) return false; return allowedModules(u).includes(key); }
+function defaultUrlForUser(u){ const keys=allowedModules(u); const first=MODULOS_SISTEMA.find(m=>keys.includes(m.key)); return first?first.url:'index.html'; }
+
+
 let supabaseClient = null;
 const DEMO = SUPABASE_URL.includes('TU-PROYECTO') || SUPABASE_ANON_KEY.includes('TU-ANON');
 if(!DEMO && window.supabase){ supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }
 const seed = {
- roles:[{id:1,nombre:'Administrador',estado:'activo'},{id:2,nombre:'Coordinador',estado:'activo'},{id:3,nombre:'Consulta',estado:'activo'}],
- usuarios:[{id:1,nombre:'Administrador',correo:'admin@cordillera.edu.ec',password:'admin123',rol:'Administrador',estado:'activo'}],
+ roles:[{id:1,nombre:'Administrador',descripcion:'Acceso total al sistema',modulos_default:'todos',estado:'activo'},{id:2,nombre:'Coordinador',descripcion:'Gestión académica y reportes',modulos_default:'dashboard,periodos,estudiantes,profesores,temas,defensas,actas,reportes,estadisticas',estado:'activo'},{id:3,nombre:'Consulta',descripcion:'Solo consulta y reportes',modulos_default:'dashboard,reportes,estadisticas',estado:'activo'},{id:4,nombre:'Secretaría',descripcion:'Actas, estudiantes y reportes',modulos_default:'dashboard,estudiantes,actas,reportes',estado:'activo'}],
+ usuarios:[{id:1,nombre:'Administrador',correo:'admin@cordillera.edu.ec',password:'admin123',rol:'Administrador',modulos:'todos',estado:'activo'}],
  periodos:[{id:1,nombre:'Maestrias 2026 - Cohorte I',fecha_inicio:'2026-01-01',fecha_fin:'2026-12-31',estado:'activo'}],
  estudiantes:[{id:1,periodo_id:1,cedula:'1720000001',nombres:'Ana Gabriela',apellidos:'Perez Mora',correo:'ana.perez@cordillera.edu.ec',telefono:'0999999991',teams:'ana.perez@cordillera.edu.ec',programa:'Maestria en Gestion Educativa',cohorte:'I',estado:'activo'},{id:2,periodo_id:1,cedula:'1720000002',nombres:'Carlos Andres',apellidos:'Lopez Vera',correo:'carlos.lopez@cordillera.edu.ec',telefono:'0999999992',teams:'carlos.lopez@cordillera.edu.ec',programa:'Maestria en Administracion',cohorte:'I',estado:'activo'}],
  profesores:[{id:1,cedula:'1711111111',nombres:'Maria Fernanda',apellidos:'Gomez Ruiz',correo:'maria.gomez@cordillera.edu.ec',telefono:'0989442980',titulo:'Mgtr.',especialidad:'Investigacion',estado:'activo'},{id:2,cedula:'1722222222',nombres:'Luis Alberto',apellidos:'Castro Diaz',correo:'luis.castro@cordillera.edu.ec',telefono:'0989442981',titulo:'PhD.',especialidad:'Metodologia',estado:'activo'},{id:3,cedula:'1733333333',nombres:'Sofia Elizabeth',apellidos:'Mena Cruz',correo:'sofia.mena@cordillera.edu.ec',telefono:'0989442982',titulo:'Mgtr.',especialidad:'Gestion',estado:'activo'}],
  temas:[{id:1,periodo_id:1,estudiante_id:1,tutor_id:1,tema:'Modelo de gestion academica para programas de posgrado',linea:'Gestion educativa',estado:'asignado'},{id:2,periodo_id:1,estudiante_id:2,tutor_id:2,tema:'Innovacion administrativa para procesos institucionales',linea:'Gestion organizacional',estado:'asignado'}],
  defensas:[{id:1,periodo_id:1,estudiante_id:1,tema_id:1,fecha_defensa:'2026-08-15',hora_defensa:'10:00',modalidad:'virtual',enlace:'https://teams.microsoft.com',aula:'',estado:'programada'},{id:2,periodo_id:1,estudiante_id:2,tema_id:2,fecha_defensa:'2026-08-16',hora_defensa:'11:00',modalidad:'presencial',enlace:'',aula:'Sala 1',estado:'programada'}],
  defensa_jurados:[{id:1,defensa_id:1,profesor_id:1,rol_jurado:'presidente',estado:'pendiente'},{id:2,defensa_id:1,profesor_id:2,rol_jurado:'vocal1',estado:'pendiente'},{id:3,defensa_id:1,profesor_id:3,rol_jurado:'vocal2',estado:'pendiente'},{id:4,defensa_id:2,profesor_id:1,rol_jurado:'presidente',estado:'pendiente'},{id:5,defensa_id:2,profesor_id:2,rol_jurado:'vocal1',estado:'pendiente'},{id:6,defensa_id:2,profesor_id:3,rol_jurado:'vocal2',estado:'pendiente'}],
- calificaciones:[], plantillas_actas:[{id:1,nombre:'Acta institucional',contenido_html:'<h2>ACTA DE DEFENSA DE MAESTRIA</h2><p>Estudiante: {{NOMBRE_ESTUDIANTE}}</p><p>Tema: {{TEMA_PROYECTO}}</p><p>Nota final: {{NOTA_FINAL}}</p><p>Estado: {{ESTADO_FINAL}}</p>',estado:'activo'}], actas:[], auditoria:[]
+ calificaciones:[], invitaciones:[], plantillas_actas:[{id:1,nombre:'Acta institucional',contenido_html:'<h2>ACTA DE DEFENSA DE MAESTRIA</h2><p>Estudiante: {{NOMBRE_ESTUDIANTE}}</p><p>Tema: {{TEMA_PROYECTO}}</p><p>Nota final: {{NOTA_FINAL}}</p><p>Estado: {{ESTADO_FINAL}}</p>',estado:'activo'}], actas:[], auditoria:[]
 };
 function loadLocal(){let d=localStorage.getItem('defensasDemoDB'); if(!d){localStorage.setItem('defensasDemoDB',JSON.stringify(seed)); return JSON.parse(JSON.stringify(seed));} return JSON.parse(d)}
 function saveLocal(d){localStorage.setItem('defensasDemoDB',JSON.stringify(d))}
@@ -35,10 +74,46 @@ async function audit(accion,modulo,descripcion){ try{await insert('auditoria',{u
 function getUser(){return JSON.parse(sessionStorage.getItem('usuario')||'null')}
 function setUser(u){sessionStorage.setItem('usuario',JSON.stringify(u))}
 function logout(){sessionStorage.clear(); location.href='index.html'}
-function requireAdmin(){ if(!getUser()){ location.href='index.html'; }}
+function requireAdmin(){
+ const u=getUser();
+ if(!u){ location.href='index.html'; return false;}
+ if(u.tipo==='jurado'){
+   alert('Acceso restringido: el docente solo puede ingresar al módulo de jurado.');
+   location.href='jurado.html';
+   return false;
+ }
+ const key=currentModuleKey();
+ if(key!=='login' && !canAccessModule(key)){
+   alert('No tiene permisos para acceder a este módulo.');
+   location.href=defaultUrlForUser(u);
+   return false;
+ }
+ return true;
+}
+function requireJurado(){ const u=getUser(); if(!u){ location.href='index.html'; return false;} if(u.tipo!=='jurado' && u.tipo!=='admin'){ location.href='index.html'; return false;} return true; }
 function money(n){return Number(n||0).toFixed(2)}
 function badge(text,type='ok'){return `<span class="badge ${type}">${text}</span>`}
 function csvDownload(filename, rows){ const csv=rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download=filename; a.click(); }
 async function calcularCierre(defensaId){ const c=(await all('calificaciones')).filter(x=>String(x.defensa_id)===String(defensaId)); if(c.length>=3){ const prom=c.reduce((s,x)=>s+Number(x.nota),0)/c.length; await update('defensas',defensaId,{estado:'finalizada',nota_final:prom,estado_final:prom>=NOTA_MINIMA_APROBACION?'aprobado':'reprobado'}); } }
 
-</script></head><body class="auth-body"><div class="auth-card"><img class="logo" src="https://i.imgur.com/9aGsanI.jpeg"><h1>Sistema de Defensas de Maestrías</h1><p class="muted">Instituto Tecnológico Universitario Cordillera</p><div class="tabs"><button class="tab active" onclick="showTab('admin',this)">Administración</button><button class="tab" onclick="showTab('jurado',this)">Jurado</button></div><form id="admin" onsubmit="loginAdmin(event)"><div class="form-group"><label>Correo</label><input id="correo" value="admin@cordillera.edu.ec"></div><div class="form-group"><label>Contraseña</label><input id="password" type="password" value="admin123"></div><button class="btn btn-primary btn-block">Ingresar</button></form><form id="jurado" class="hidden" onsubmit="loginJurado(event)"><div class="form-group"><label>Cédula del docente</label><input id="cedulaJurado" value="1711111111"></div><button class="btn btn-success btn-block">Ingresar a defensas</button></form><p class="footer-small">Demo: admin@cordillera.edu.ec / admin123 | Jurado: 1711111111</p></div><script>function showTab(id,btn){document.querySelectorAll('form').forEach(f=>f.classList.add('hidden'));document.getElementById(id).classList.remove('hidden');document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active')}async function loginAdmin(e){e.preventDefault();try{const usuarios=await all('usuarios');const u=usuarios.find(x=>x.correo===correo.value&&x.password===password.value&&x.estado==='activo');if(!u){alert('Credenciales incorrectas o usuario inactivo. Verifique que haya ejecutado datos_demo.sql en Supabase.');return}setUser({...u,tipo:'admin'});await audit('login','auth','Ingreso administrador');location.href='dashboard.html'}catch(err){console.error(err);alert('No se pudo conectar con Supabase o falta ejecutar el SQL de tablas/datos. Revise la consola y ejecute tablas.sql, politicas_rls.sql y datos_demo.sql.')} }async function loginJurado(e){e.preventDefault();try{const profesores=await all('profesores');const p=profesores.find(x=>x.cedula===cedulaJurado.value&&x.estado==='activo');if(!p){alert('El docente no consta activo en la base. Verifique que exista en profesores o que haya ejecutado datos_demo.sql.');return}setUser({...p,tipo:'jurado'});await audit('login','jurado','Ingreso jurado '+p.cedula);location.href='jurado.html'}catch(err){console.error(err);alert('No se pudo conectar con Supabase o falta ejecutar el SQL de tablas/datos. Revise la consola y ejecute tablas.sql, politicas_rls.sql y datos_demo.sql.')} }</script></body></html>
+</script></head><body class="auth-body"><div class="auth-card" id="authCard"><img class="logo" src="https://i.imgur.com/9aGsanI.jpeg"><h1>Sistema de Defensas de Maestrías</h1><p class="muted">Instituto Tecnológico Universitario Cordillera</p><div class="tabs"><button class="tab active" onclick="showTab('admin',this)">Administración</button><button class="tab" onclick="showTab('jurado',this)">Jurado</button></div><form id="admin" onsubmit="loginAdmin(event)"><div class="form-group"><label>Correo</label><input id="correo" value="admin@cordillera.edu.ec"></div><div class="form-group"><label>Contraseña</label><input id="password" type="password" value="admin123"></div><button class="btn btn-primary btn-block">Ingresar</button></form><form id="jurado" class="hidden" onsubmit="loginJurado(event)"><div class="form-group"><label>Cédula del docente</label><input id="cedulaJurado" value="1711111111"></div><button class="btn btn-success btn-block">Ingresar a defensas</button></form><p class="footer-small">Demo: admin@cordillera.edu.ec / admin123 | Jurado: 1711111111</p></div><script>function showTab(id,btn){document.querySelectorAll('form').forEach(f=>f.classList.add('hidden'));document.getElementById(id).classList.remove('hidden');document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active')}async function loginAdmin(e){e.preventDefault();try{const usuarios=await all('usuarios');const u=usuarios.find(x=>x.correo===correo.value&&x.password===password.value&&x.estado==='activo');if(!u){alert('Credenciales incorrectas o usuario inactivo. Verifique que haya ejecutado datos_demo.sql en Supabase.');return}setUser({...u,tipo:'admin'});await audit('login','auth','Ingreso administrador');location.href=defaultUrlForUser({...u,tipo:'admin'})}catch(err){console.error(err);alert('No se pudo conectar con Supabase o falta ejecutar el SQL de tablas/datos. Revise la consola y ejecute tablas.sql, politicas_rls.sql y datos_demo.sql.')} }async function loginJurado(e){e.preventDefault();try{const profesores=await all('profesores');const p=profesores.find(x=>x.cedula===cedulaJurado.value&&x.estado==='activo');if(!p){alert('El docente no consta activo en la base. Verifique que exista en profesores o que haya ejecutado datos_demo.sql.');return}setUser({...p,tipo:'jurado'});await audit('login','jurado','Ingreso jurado '+p.cedula);location.href='jurado.html'}catch(err){console.error(err);alert('No se pudo conectar con Supabase o falta ejecutar el SQL de tablas/datos. Revise la consola y ejecute tablas.sql, politicas_rls.sql y datos_demo.sql.')} }
+async function iniciarInvitacion(){
+ const params=new URLSearchParams(location.search); const token=params.get('invite'); if(!token) return;
+ try{
+   const invs=await all('invitaciones'); const inv=invs.find(x=>String(x.token)===String(token) && String(x.estado||'pendiente')!=='usado');
+   const card=document.getElementById('authCard');
+   if(!inv){ card.innerHTML='<h1>Invitación no válida</h1><p class="muted">El enlace de invitación no existe, ya fue usado o está inactivo.</p><a class="btn btn-primary btn-block" href="index.html">Volver al inicio</a>'; return; }
+   card.innerHTML=`<img class="logo" src="${LOGO_URL}"><h1>Activar acceso</h1><p class="muted">Complete sus datos para ingresar al sistema.</p><form onsubmit="registrarInvitado(event,'${token}')"><div class="form-group"><label>Nombre</label><input id="invNombre" value="${inv.nombre||''}" required></div><div class="form-group"><label>Correo</label><input id="invCorreo" value="${inv.correo||''}" required></div><div class="form-group"><label>Contraseña</label><input id="invPassword" type="password" required></div><div class="note">Rol asignado: <strong>${inv.rol||'Consulta'}</strong></div><button class="btn btn-primary btn-block">Activar cuenta</button></form>`;
+ }catch(e){console.error(e); alert('No se pudo validar la invitación. Revise que exista la tabla invitaciones.');}
+}
+async function registrarInvitado(e,token){
+ e.preventDefault();
+ const invs=await all('invitaciones'); const inv=invs.find(x=>String(x.token)===String(token)); if(!inv){alert('Invitación no válida');return;}
+ const usuarios=await all('usuarios'); const existente=usuarios.find(u=>String(u.correo).toLowerCase()===getVal('invCorreo').toLowerCase());
+ const row={nombre:getVal('invNombre'),correo:getVal('invCorreo'),password:getVal('invPassword'),rol:inv.rol||'Consulta',modulos:inv.modulos||'',estado:'activo'};
+ if(existente){ await update('usuarios',existente.id,row); } else { await insert('usuarios',row); }
+ await update('invitaciones',inv.id,{estado:'usado',fecha_uso:new Date().toISOString()});
+ alert('Cuenta activada correctamente. Ahora puede ingresar.'); location.href='index.html';
+}
+iniciarInvitacion();
+</script></body></html>
