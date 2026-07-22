@@ -38,8 +38,7 @@ function logout(){sessionStorage.clear(); location.href='index.html'}
 function requireAdmin(){ if(!getUser()){ location.href='index.html'; }}
 function money(n){return Number(n||0).toFixed(2)}
 function badge(text,type='ok'){return `<span class="badge ${type}">${text}</span>`}
-function csvDownload(filename, rows){ const csv=rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('
-'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download=filename; a.click(); }
+function csvDownload(filename, rows){ const csv=rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download=filename; a.click(); }
 async function calcularCierre(defensaId){ const c=(await all('calificaciones')).filter(x=>String(x.defensa_id)===String(defensaId)); if(c.length>=3){ const prom=c.reduce((s,x)=>s+Number(x.nota),0)/c.length; await update('defensas',defensaId,{estado:'finalizada',nota_final:prom,estado_final:prom>=NOTA_MINIMA_APROBACION?'aprobado':'reprobado'}); } }
 
 function pageShell(title){document.write(`
