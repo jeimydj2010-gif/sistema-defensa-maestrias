@@ -96,9 +96,38 @@ function badge(text,type='ok'){return `<span class="badge ${type}">${text}</span
 function csvDownload(filename, rows){ const csv=rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download=filename; a.click(); }
 async function calcularCierre(defensaId){ const c=(await all('calificaciones')).filter(x=>String(x.defensa_id)===String(defensaId)); if(c.length>=3){ const prom=c.reduce((s,x)=>s+Number(x.nota),0)/c.length; await update('defensas',defensaId,{estado:'finalizada',nota_final:prom,estado_final:prom>=NOTA_MINIMA_APROBACION?'aprobado':'reprobado'}); } }
 
-</script></head><body class="auth-body"><div class="auth-card" id="authCard"><img class="logo" src="https://i.imgur.com/9aGsanI.jpeg"><h1>Sistema de Defensas de Maestrías</h1><p class="muted">Instituto Tecnológico Universitario Cordillera</p><div class="tabs"><button class="tab active" onclick="showTab('admin',this)">Administración</button><button class="tab" onclick="showTab('jurado',this)">Jurado</button></div><form id="admin" onsubmit="loginAdmin(event)"><div class="form-group"><label>Correo</label><input id="correo" value="admin@cordillera.edu.ec"></div><div class="form-group"><label>Contraseña</label><input id="password" type="password" value="admin123"></div><button class="btn btn-primary btn-block">Ingresar</button></form><form id="jurado" class="hidden" onsubmit="loginJurado(event)"><div class="form-group"><label>Cédula del docente</label><input id="cedulaJurado" value="1711111111"></div><button class="btn btn-success btn-block">Ingresar a defensas</button></form><p class="footer-small">Demo: admin@cordillera.edu.ec / admin123 | Jurado: 1711111111</p></div><script>function showTab(id,btn){document.querySelectorAll('form').forEach(f=>f.classList.add('hidden'));document.getElementById(id).classList.remove('hidden');document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active')}async function loginAdmin(e){e.preventDefault();try{const usuarios=await all('usuarios');const u=usuarios.find(x=>x.correo===correo.value&&x.password===password.value&&x.estado==='activo');if(!u){alert('Credenciales incorrectas o usuario inactivo. Verifique que haya ejecutado datos_demo.sql en Supabase.');return}setUser({...u,tipo:'admin'});await audit('login','auth','Ingreso administrador');location.href=defaultUrlForUser({...u,tipo:'admin'})}catch(err){console.error(err);alert('No se pudo conectar con Supabase o falta ejecutar el SQL de tablas/datos. Revise la consola y ejecute tablas.sql, politicas_rls.sql y datos_demo.sql.')} }async function loginJurado(e){e.preventDefault();try{const profesores=await all('profesores');const p=profesores.find(x=>x.cedula===cedulaJurado.value&&x.estado==='activo');if(!p){alert('El docente no consta activo en la base. Verifique que exista en profesores o que haya ejecutado datos_demo.sql.');return}setUser({...p,tipo:'jurado'});await audit('login','jurado','Ingreso jurado '+p.cedula);location.href='jurado.html'}catch(err){console.error(err);alert('No se pudo conectar con Supabase o falta ejecutar el SQL de tablas/datos. Revise la consola y ejecute tablas.sql, politicas_rls.sql y datos_demo.sql.')} }
+</script></head><body class="auth-body"><div class="auth-card" id="authCard"><img class="logo" src="https://i.imgur.com/9aGsanI.jpeg"><h1>Sistema de Defensas de Maestrías</h1><p class="muted">Instituto Tecnológico Universitario Cordillera</p><div class="tabs"><button class="tab active" onclick="showTab('admin',this)">Administración</button><button class="tab" onclick="showTab('jurado',this)">Jurado</button></div><form id="admin" onsubmit="loginAdmin(event)"><div class="form-group"><label>Correo</label><input id="correo" value="admin@cordillera.edu.ec"></div><div class="form-group"><label>Contraseña</label><input id="password" type="password" value="admin123"></div><button class="btn btn-primary btn-block">Ingresar</button></form><form id="jurado" class="hidden" onsubmit="loginJurado(event)"><div class="form-group"><label>Cédula del docente</label><input id="cedulaJurado" value="1711111111"></div><button class="btn btn-success btn-block">Ingresar a defensas</button></form><p class="footer-small">Demo: admin@cordillera.edu.ec / admin123 | Jurado: 1711111111</p></div><script>function showTab(id,btn){document.querySelectorAll('form').forEach(f=>f.classList.add('hidden'));document.getElementById(id).classList.remove('hidden');document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active')}async function loginAdmin(e){e.preventDefault();try{const usuarios=await all('usuarios');const u=usuarios.find(x=>x.correo===correo.value&&x.password===password.value&&x.estado==='activo');if(!u){alert('Credenciales incorrectas o usuario inactivo. Verifique que haya ejecutado datos_demo.sql en Supabase.');return}setUser({...u,tipo:'admin'});await audit('login','auth','Ingreso administrador');location.href=defaultUrlForUser({...u,tipo:'admin'})}catch(err){console.error(err);alert('No se pudo conectar con Supabase o falta ejecutar el SQL de tablas/datos. Revise la consola y ejecute tablas.sql, politicas_rls.sql y datos_demo.sql.')} }async function loginJurado(e){
+ e.preventDefault();
+ try{
+   const ced=(cedulaJurado.value||'').trim();
+   const profesores=await all('profesores');
+   const p=profesores.find(x=>String(x.cedula)===String(ced));
+   if(!p){alert('Usted no consta como docente habilitado para defensas. Comuníquese con la coordinación académica.');return}
+   const estado=String(p.estado||'activo').toLowerCase();
+   const acceso=String(p.estado_acceso||'activo').toLowerCase();
+   if(estado!=='activo' || acceso==='inactivo'){
+     alert('Su usuario docente se encuentra inactivo. Comuníquese con la coordinación académica.');return
+   }
+   if(acceso==='pendiente'){
+     alert('Su acceso docente está pendiente de activación. Revise la URL de invitación enviada por coordinación.');return
+   }
+   if(acceso==='bloqueado' || p.bloqueado===true){
+     alert('Su acceso docente se encuentra bloqueado. Comuníquese con la coordinación académica.');return
+   }
+   const jurados=await all('defensa_jurados');
+   const asignado=jurados.some(j=>String(j.profesor_id)===String(p.id));
+   if(!asignado){alert('No tiene defensas asignadas en este momento.');return}
+   setUser({...p,tipo:'jurado',modulos:'jurado'});
+   try{await update('profesores',p.id,{ultimo_acceso:new Date().toISOString(),intentos_fallidos:0});}catch(e){}
+   await audit('login','jurado','Ingreso jurado '+p.cedula);
+   location.href='jurado.html'
+ }catch(err){console.error(err);alert('No se pudo conectar con Supabase o falta ejecutar el SQL de tablas/datos. Revise la consola y ejecute tablas.sql, politicas_rls.sql, datos_demo.sql y actualizacion_docentes_invitacion.sql.')}
+}
 async function iniciarInvitacion(){
- const params=new URLSearchParams(location.search); const token=params.get('invite'); if(!token) return;
+ const params=new URLSearchParams(location.search);
+ const tokenDoc=params.get('invite_docente');
+ if(tokenDoc){ await iniciarInvitacionDocente(tokenDoc); return; }
+ const token=params.get('invite'); if(!token) return;
  try{
    const invs=await all('invitaciones'); const inv=invs.find(x=>String(x.token)===String(token) && String(x.estado||'pendiente')!=='usado');
    const card=document.getElementById('authCard');
@@ -114,6 +143,25 @@ async function registrarInvitado(e,token){
  if(existente){ await update('usuarios',existente.id,row); } else { await insert('usuarios',row); }
  await update('invitaciones',inv.id,{estado:'usado',fecha_uso:new Date().toISOString()});
  alert('Cuenta activada correctamente. Ahora puede ingresar.'); location.href='index.html';
+}
+
+async function iniciarInvitacionDocente(token){
+ try{
+   const invs=await all('invitaciones_docentes');
+   const inv=invs.find(x=>String(x.token)===String(token) && !['usado','inactivo'].includes(String(x.estado||'pendiente')));
+   const card=document.getElementById('authCard');
+   if(!inv){ card.innerHTML='<h1>Invitación docente no válida</h1><p class="muted">El enlace no existe, ya fue usado o está inactivo.</p><a class="btn btn-primary btn-block" href="index.html">Volver al inicio</a>'; return; }
+   card.innerHTML=`<img class="logo" src="${LOGO_URL}"><h1>Activar acceso docente</h1><p class="muted">Confirme sus datos para habilitar el acceso al módulo de defensa.</p><form onsubmit="registrarDocenteInvitado(event,'${token}')"><div class="grid grid-2"><div class="form-group"><label>Cédula</label><input id="docCedula" value="${inv.cedula||''}" required></div><div class="form-group"><label>Nombres</label><input id="docNombres" value="${inv.nombres||''}" required></div><div class="form-group"><label>Apellidos</label><input id="docApellidos" value="${inv.apellidos||''}" required></div><div class="form-group"><label>Correo</label><input id="docCorreo" value="${inv.correo||''}"></div><div class="form-group"><label>Teléfono</label><input id="docTelefono" value="${inv.telefono||''}"></div><div class="form-group"><label>Título</label><input id="docTitulo" value="${inv.titulo||''}"></div><div class="form-group"><label>Especialidad</label><input id="docEspecialidad" value="${inv.especialidad||''}"></div></div><div class="note">Al activar su cuenta, podrá ingresar únicamente al módulo <strong>Mis defensas asignadas</strong> usando su número de cédula.</div><button class="btn btn-success btn-block">Activar acceso docente</button></form>`;
+ }catch(e){console.error(e); alert('No se pudo validar la invitación docente. Ejecute actualizacion_docentes_invitacion.sql en Supabase.');}
+}
+async function registrarDocenteInvitado(e,token){
+ e.preventDefault();
+ const invs=await all('invitaciones_docentes'); const inv=invs.find(x=>String(x.token)===String(token)); if(!inv){alert('Invitación docente no válida');return;}
+ const profesores=await all('profesores'); const existente=profesores.find(p=>String(p.cedula)===getVal('docCedula'));
+ const row={cedula:getVal('docCedula'),nombres:getVal('docNombres'),apellidos:getVal('docApellidos'),correo:getVal('docCorreo'),telefono:getVal('docTelefono'),titulo:getVal('docTitulo'),especialidad:getVal('docEspecialidad'),estado:'activo',estado_acceso:'activo',fecha_activacion:new Date().toISOString(),token_invitacion:token};
+ if(existente){ await update('profesores',existente.id,row); } else { await insert('profesores',row); }
+ await update('invitaciones_docentes',inv.id,{estado:'usado',fecha_uso:new Date().toISOString()});
+ alert('Acceso docente activado correctamente. Ahora ingrese en la pestaña Jurado con su cédula.'); location.href='index.html';
 }
 iniciarInvitacion();
 </script></body></html>

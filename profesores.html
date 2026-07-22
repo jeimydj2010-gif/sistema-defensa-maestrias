@@ -112,15 +112,77 @@ window.filterTable=function(){ const q=getVal('buscar').toLowerCase(); document.
 
 const MODELOS_IMPORTACION={
  estudiantes:['periodo_id','cedula','nombres','apellidos','correo','telefono','teams','programa','cohorte','estado'],
- profesores:['cedula','nombres','apellidos','correo','telefono','titulo','especialidad','estado']
+ profesores:['cedula','nombres','apellidos','correo','telefono','titulo','especialidad','estado','estado_acceso']
 };
-function descargarModelo(table){ const headers=MODELOS_IMPORTACION[table]||[]; const ejemplo=table==='estudiantes'?[1,'1720000001','NOMBRES','APELLIDOS','correo@cordillera.edu.ec','0999999999','correo@cordillera.edu.ec','Maestria Tecnologica','I','activo']:['1711111111','NOMBRES','APELLIDOS','docente@cordillera.edu.ec','0999999999','Mgtr.','Investigacion','activo']; csvDownload('modelo_'+table+'.csv',[headers,ejemplo]); }
+function descargarModelo(table){ const headers=MODELOS_IMPORTACION[table]||[]; const ejemplo=table==='estudiantes'?[1,'1720000001','NOMBRES','APELLIDOS','correo@cordillera.edu.ec','0999999999','correo@cordillera.edu.ec','Maestria Tecnologica','I','activo']:['1711111111','NOMBRES','APELLIDOS','docente@cordillera.edu.ec','0999999999','Mgtr.','Investigacion','activo','activo']; csvDownload('modelo_'+table+'.csv',[headers,ejemplo]); }
 function openImportModal(table){ modal('Importar '+table+' desde XLS/XLSX',`<div class="note"><strong>Formato requerido:</strong> el archivo debe tener encabezados: ${(MODELOS_IMPORTACION[table]||[]).join(', ')}. También puede usar el botón Descargar modelo.</div><input type="file" id="xlsFile" accept=".xlsx,.xls,.csv"><div class="toolbar" style="margin-top:14px"><button class="btn btn-primary" onclick="procesarImportacion('${table}')">Importar archivo</button><button class="btn btn-outline" onclick="descargarModelo('${table}')">Descargar modelo</button></div><div id="importResult" class="muted"></div>`); }
 async function procesarImportacion(table){ const file=document.getElementById('xlsFile').files[0]; if(!file){alert('Seleccione un archivo XLS, XLSX o CSV');return} if(!window.XLSX){alert('No se cargó la librería XLSX. Verifique conexión a Internet.');return} const buf=await file.arrayBuffer(); const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; const rows=XLSX.utils.sheet_to_json(ws,{defval:''}); const headers=MODELOS_IMPORTACION[table]; let ok=0,err=[]; for(const [i,r] of rows.entries()){ let row={}; headers.forEach(h=>row[h]=String(r[h]??r[h.toUpperCase()]??r[h.replace('_',' ')]??'').trim()); if(table==='estudiantes' && (!row.cedula||!row.nombres||!row.apellidos)){err.push('Fila '+(i+2)+': faltan cedula, nombres o apellidos'); continue;} if(table==='profesores' && (!row.cedula||!row.nombres||!row.apellidos)){err.push('Fila '+(i+2)+': faltan cedula, nombres o apellidos'); continue;} if(!row.estado) row.estado='activo'; try{await insert(table,row); ok++;}catch(e){err.push('Fila '+(i+2)+': '+e.message)} } await audit('importar',table,'Importados '+ok+' registros desde XLS'); document.getElementById('importResult').innerHTML=`<p><strong>${ok}</strong> registros importados.</p>${err.length?'<p style="color:#E47E3D">'+err.join('<br>')+'</p>':''}`; setTimeout(()=>location.reload(),1200); }
 
 async function lookup(){ const [est,prof,tem,def,jur,cal]=await Promise.all(['estudiantes','profesores','temas','defensas','defensa_jurados','calificaciones'].map(all)); return {est,prof,tem,def,jur,cal}; }
 
 </script></head><body><script>pageShell('Profesores')</script><script>
-renderCrud({table:'profesores',title:'Profesores',fields:[{key:'cedula',label:'Cédula'},{key:'nombres',label:'Nombres'},{key:'apellidos',label:'Apellidos'},{key:'correo',label:'Correo'},{key:'telefono',label:'Teléfono'},{key:'titulo',label:'Título académico'},{key:'especialidad',label:'Especialidad'},{key:'estado',label:'Estado'}],columns:[{key:'cedula',label:'Cédula'},{key:'nombres',label:'Nombres'},{key:'apellidos',label:'Apellidos'},{key:'correo',label:'Correo'},{key:'titulo',label:'Título'},{key:'especialidad',label:'Especialidad'},{key:'estado',label:'Estado',render:r=>badge(r.estado,r.estado==='activo'?'ok':'warn')}]});
+
+async function allSafe(table){ try{return await all(table)}catch(e){console.warn('Tabla no disponible:',table,e.message); return [];} }
+function urlInvitacionDocente(token){ return location.href.replace('profesores.html','index.html').split('?')[0]+'?invite_docente='+encodeURIComponent(token||''); }
+function estadoBadgeDocente(r){
+  const estado=(r.estado||'activo');
+  const acceso=(r.estado_acceso||'activo');
+  if(estado==='inactivo' || acceso==='inactivo') return badge('Inactivo','warn');
+  if(acceso==='pendiente') return badge('Pendiente','warn');
+  if(acceso==='bloqueado' || r.bloqueado===true) return badge('Bloqueado','err');
+  return badge('Activo','ok');
+}
+async function renderProfesores(){
+ if(!requireAdmin()) return;
+ const app=document.getElementById('app');
+ const data=await all('profesores');
+ const invs=await allSafe('invitaciones_docentes');
+ app.innerHTML=`<div class="card">
+  <div class="toolbar">
+    <button class="btn btn-primary" onclick="openProfesor()">➕ Nuevo docente</button>
+    <button class="btn btn-success" onclick="openImportModal('profesores')">📤 Importar XLS/XLSX</button>
+    <button class="btn btn-outline" onclick="descargarModelo('profesores')">📄 Descargar modelo</button>
+    <button class="btn btn-success" onclick="openDocenteInvite()">🔗 Invitar docente</button>
+    <button class="btn btn-outline" onclick="exportTable('profesores')">📥 Exportar CSV</button>
+    <input id="buscar" placeholder="Buscar..." oninput="filterTable()">
+  </div>
+  <div class="note"><strong>Control de acceso docente:</strong> el docente solo ingresa si consta activo, no está bloqueado y tiene defensas asignadas. Si ingresa, verá únicamente el módulo <strong>Mis defensas asignadas</strong>.</div>
+  <div class="table-wrap"><table id="mainTable"><thead><tr><th>Cédula</th><th>Nombres</th><th>Apellidos</th><th>Correo</th><th>Título</th><th>Especialidad</th><th>Acceso</th><th>Acciones</th></tr></thead><tbody>
+  ${data.map(r=>`<tr><td>${r.cedula||''}</td><td>${r.nombres||''}</td><td>${r.apellidos||''}</td><td>${r.correo||''}</td><td>${r.titulo||''}</td><td>${r.especialidad||''}</td><td>${estadoBadgeDocente(r)}</td><td><button class="btn btn-secondary" onclick="openProfesor(${r.id})">✏️</button> <button class="btn btn-outline" onclick="toggleProfesor(${r.id},'${(r.estado==='activo'?'inactivo':'activo')}')">${r.estado==='activo'?'🚫 Inactivar':'✅ Activar'}</button> <button class="btn btn-success" onclick="openDocenteInvite(${r.id})">🔗 Invitar</button> <button class="btn btn-danger" onclick="del('profesores',${r.id})">🗑️</button></td></tr>`).join('')}
+  </tbody></table></div>
+ </div>
+ <div class="card" style="margin-top:18px"><h2>Invitaciones docentes</h2><p class="muted">Estas URLs permiten que un docente active su acceso, exista o no exista previamente en la base de profesores.</p><div class="table-wrap"><table><thead><tr><th>Cédula</th><th>Docente</th><th>Correo</th><th>Estado</th><th>URL</th><th>Acciones</th></tr></thead><tbody>${invs.map(i=>`<tr><td>${i.cedula||''}</td><td>${(i.nombres||'')+' '+(i.apellidos||'')}</td><td>${i.correo||''}</td><td>${badge(i.estado||'pendiente',(i.estado||'pendiente')==='usado'?'ok':'warn')}</td><td><input value="${urlInvitacionDocente(i.token)}" readonly onclick="this.select()"></td><td><button class="btn btn-outline" onclick="copiarTexto('${urlInvitacionDocente(i.token)}')">Copiar</button> <button class="btn btn-danger" onclick="removeDocenteInvite(${i.id})">🗑️</button></td></tr>`).join('')||'<tr><td colspan="6">Sin invitaciones docentes generadas.</td></tr>'}</tbody></table></div></div>`;
+}
+async function openProfesor(id=null){
+ const data=await all('profesores'); const r=id?data.find(x=>String(x.id)===String(id)):{};
+ modal(id?'Editar docente':'Nuevo docente',`<form onsubmit="saveProfesor(event,${id||'null'})"><div class="grid grid-2">
+  <div class="form-group"><label>Cédula</label><input id="p_cedula" value="${r.cedula||''}" required></div>
+  <div class="form-group"><label>Nombres</label><input id="p_nombres" value="${r.nombres||''}" required></div>
+  <div class="form-group"><label>Apellidos</label><input id="p_apellidos" value="${r.apellidos||''}" required></div>
+  <div class="form-group"><label>Correo</label><input id="p_correo" value="${r.correo||''}"></div>
+  <div class="form-group"><label>Teléfono</label><input id="p_telefono" value="${r.telefono||''}"></div>
+  <div class="form-group"><label>Título académico</label><input id="p_titulo" value="${r.titulo||''}"></div>
+  <div class="form-group"><label>Especialidad</label><input id="p_especialidad" value="${r.especialidad||''}"></div>
+  <div class="form-group"><label>Estado administrativo</label><select id="p_estado"><option ${r.estado==='activo'?'selected':''}>activo</option><option ${r.estado==='inactivo'?'selected':''}>inactivo</option></select></div>
+  <div class="form-group"><label>Estado de acceso</label><select id="p_estado_acceso"><option ${r.estado_acceso==='activo'?'selected':''}>activo</option><option ${r.estado_acceso==='pendiente'?'selected':''}>pendiente</option><option ${r.estado_acceso==='inactivo'?'selected':''}>inactivo</option><option ${r.estado_acceso==='bloqueado'?'selected':''}>bloqueado</option></select></div>
+ </div><button class="btn btn-primary">Guardar docente</button></form>`);
+}
+async function saveProfesor(e,id){ e.preventDefault(); const row={cedula:getVal('p_cedula'),nombres:getVal('p_nombres'),apellidos:getVal('p_apellidos'),correo:getVal('p_correo'),telefono:getVal('p_telefono'),titulo:getVal('p_titulo'),especialidad:getVal('p_especialidad'),estado:getVal('p_estado'),estado_acceso:getVal('p_estado_acceso')}; if(id){await update('profesores',id,row); await audit('editar','profesores','Editó docente '+id)}else{await insert('profesores',row); await audit('crear','profesores','Creó docente '+row.cedula)} location.reload(); }
+async function toggleProfesor(id,nuevo){ const row={estado:nuevo,estado_acceso:nuevo==='activo'?'activo':'inactivo'}; await update('profesores',id,row); await audit(nuevo==='activo'?'activar':'inactivar','profesores','Cambió estado docente '+id+' a '+nuevo); location.reload(); }
+async function openDocenteInvite(id=null){ const data=await all('profesores'); const r=id?data.find(x=>String(x.id)===String(id)):{}; modal('Crear URL de invitación docente',`<form onsubmit="saveDocenteInvite(event,${id||'null'})"><div class="grid grid-2">
+  <div class="form-group"><label>Cédula</label><input id="di_cedula" value="${r.cedula||''}" required></div>
+  <div class="form-group"><label>Nombres</label><input id="di_nombres" value="${r.nombres||''}" required></div>
+  <div class="form-group"><label>Apellidos</label><input id="di_apellidos" value="${r.apellidos||''}" required></div>
+  <div class="form-group"><label>Correo</label><input id="di_correo" value="${r.correo||''}"></div>
+  <div class="form-group"><label>Teléfono</label><input id="di_telefono" value="${r.telefono||''}"></div>
+  <div class="form-group"><label>Título</label><input id="di_titulo" value="${r.titulo||''}"></div>
+  <div class="form-group"><label>Especialidad</label><input id="di_especialidad" value="${r.especialidad||''}"></div>
+  <div class="form-group"><label>Estado inicial</label><select id="di_estado"><option>pendiente</option><option>activo</option><option>inactivo</option></select></div>
+ </div><button class="btn btn-success">Generar invitación docente</button></form>`); }
+async function saveDocenteInvite(e,profId=null){ e.preventDefault(); const token='DOC-'+Date.now()+'-'+Math.random().toString(36).slice(2,8).toUpperCase(); const row={token,cedula:getVal('di_cedula'),nombres:getVal('di_nombres'),apellidos:getVal('di_apellidos'),correo:getVal('di_correo'),telefono:getVal('di_telefono'),titulo:getVal('di_titulo'),especialidad:getVal('di_especialidad'),estado:getVal('di_estado'),fecha_creacion:new Date().toISOString()}; await insert('invitaciones_docentes',row); if(profId){ await update('profesores',profId,{estado_acceso:'pendiente',token_invitacion:token,fecha_invitacion:new Date().toISOString()}); } await audit('crear','invitaciones_docentes','Creó invitación docente '+row.cedula); alert('Invitación docente creada. Copie el enlace desde la tabla.'); location.reload(); }
+async function removeDocenteInvite(id){ if(confirm('¿Eliminar esta invitación docente?')){ await removeRow('invitaciones_docentes',id); await audit('eliminar','invitaciones_docentes','Eliminó invitación '+id); location.reload(); } }
+function copiarTexto(t){ navigator.clipboard?.writeText(t); alert('URL copiada'); }
+renderProfesores();
+
 
 </script></body></html>
