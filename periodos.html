@@ -20,7 +20,7 @@
 .chart-box{min-height:260px}.chart-title{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px}.chart-title h2{margin:0}.chart-svg{width:100%;height:260px;display:block}.chart-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}.legend-item{font-size:12px;font-weight:700;color:#374151}.dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:5px}.bar-row{display:grid;grid-template-columns:135px 1fr 45px;gap:10px;align-items:center;margin:10px 0}.bar-bg{height:18px;background:#eef2f2;border-radius:999px;overflow:hidden}.bar-fill{height:18px;background:linear-gradient(90deg,#006068,#00CE7C);border-radius:999px}.empty-state{padding:28px;border:1px dashed var(--borde);border-radius:14px;background:#fbfdfd;color:var(--plomo);text-align:center}
 @media(max-width:900px){.bar-row{grid-template-columns:1fr}.module-table td{display:block}.module-table tr{display:block;border-bottom:1px solid #edf2f1}}
 @media print{@page{size:auto;margin:12mm}.table-wrap{overflow:visible}table{font-size:11px;min-width:0;width:100%}th,td{padding:6px;word-break:break-word}.content{padding:0}.chart-svg{height:210px}}
-</style><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script>
+</style><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script>
 // Configuracion Supabase
 // 1) Cree el proyecto en Supabase
 // 2) Ejecute supabase/tablas.sql y supabase/politicas_rls.sql
@@ -175,8 +175,120 @@ function normalizarFilaImportacion(table,r){
  return r;
 }
 function descargarModelo(table){ const headers=MODELOS_IMPORTACION[table]||[]; let ejemplo=[]; if(table==='estudiantes') ejemplo=['1720000001','NOMBRE COMPLETO DEL ESTUDIANTE','estudiante@cordillera.edu.ec','personal@gmail.com','0999999999','0999999999','MAESTRIA TECNOLOGICA EN DESARROLLO E INNOVACION DIGITAL EN LOS NEGOCIOS','I','NUEVO','2026-2026']; else if(table==='profesores') ejemplo=['1711111111','NOMBRES','APELLIDOS','docente@cordillera.edu.ec','0999999999','Mgtr.','activo','activo']; else if(table==='maestrias') ejemplo=['Maestría Tecnológica en Desarrollo e Innovación Digital en los Negocios','MT-DIDN','activo']; csvDownload('modelo_'+table+'.csv',[headers,ejemplo]); }
-function openImportModal(table){ modal('Importar '+table+' desde XLS/XLSX',`<div class="note"><strong>Formato requerido:</strong> el archivo debe tener encabezados: ${(MODELOS_IMPORTACION[table]||[]).join(', ')}. También puede usar el botón Descargar modelo.</div><input type="file" id="xlsFile" accept=".xlsx,.xls,.csv"><div class="toolbar" style="margin-top:14px"><button class="btn btn-primary" onclick="procesarImportacion('${table}')">Importar archivo</button><button class="btn btn-outline" onclick="descargarModelo('${table}')">Descargar modelo</button></div><div id="importResult" class="muted"></div>`); }
-async function procesarImportacion(table){ const file=document.getElementById('xlsFile').files[0]; if(!file){alert('Seleccione un archivo XLS, XLSX o CSV');return} if(!window.XLSX){alert('No se cargó la librería XLSX. Verifique conexión a Internet.');return} const buf=await file.arrayBuffer(); const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]]; const rows=XLSX.utils.sheet_to_json(ws,{defval:''}); let ok=0,err=[]; for(const [i,r] of rows.entries()){ let row=normalizarFilaImportacion(table,r); if(table==='estudiantes' && (!row.cedula||!row.nombre)){err.push('Fila '+(i+2)+': faltan CEDULA o NOMBRE'); continue;} if(table==='profesores' && (!row.cedula||!row.nombres||!row.apellidos)){err.push('Fila '+(i+2)+': faltan cedula, nombres o apellidos'); continue;} if(table==='maestrias' && !row.nombre){err.push('Fila '+(i+2)+': falta nombre de maestría'); continue;} try{await insert(table,row); ok++;}catch(e){err.push('Fila '+(i+2)+': '+e.message)} } await audit('importar',table,'Importados '+ok+' registros desde XLS'); document.getElementById('importResult').innerHTML=`<p><strong>${ok}</strong> registros importados.</p>${err.length?'<p style="color:#E47E3D">'+err.join('<br>')+'</p>':''}`; setTimeout(()=>location.reload(),1200); }
+window.openImportModal = function(table){
+  const headers = MODELOS_IMPORTACION[table] || [];
+  modal('Importar '+table+' desde XLS/XLSX',`
+    <div class="note"><strong>Formato requerido:</strong> el archivo debe tener encabezados: ${headers.join(', ')}. También puede usar el botón Descargar modelo.</div>
+    <input type="file" id="xlsFile" accept=".xlsx,.xls,.csv">
+    <div class="toolbar" style="margin-top:14px">
+      <button id="btnImportarArchivo" class="btn btn-primary" onclick="procesarImportacion('${table}')">📤 Importar archivo</button>
+      <button class="btn btn-outline" onclick="descargarModelo('${table}')">📄 Descargar modelo</button>
+    </div>
+    <div id="importProgressBox" style="display:none;margin-top:14px;border:1px solid var(--borde);border-radius:12px;padding:12px;background:#f8fffc">
+      <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:8px;font-weight:700;color:var(--verde-oscuro)">
+        <span id="importProgressText">Preparando importación...</span>
+        <span id="importProgressPercent">0%</span>
+      </div>
+      <div style="height:14px;background:#e5eeee;border-radius:999px;overflow:hidden">
+        <div id="importProgressBar" style="height:14px;width:0%;background:linear-gradient(90deg,var(--verde-oscuro),var(--verde));transition:width .2s"></div>
+      </div>
+      <div id="importProgressDetail" class="muted" style="margin-top:8px">Esperando archivo.</div>
+    </div>
+    <div id="importResult" class="muted" style="margin-top:12px"></div>
+  `);
+}
+window.procesarImportacion = async function(table){
+  const fileInput = document.getElementById('xlsFile');
+  const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+  const result = document.getElementById('importResult');
+  const box = document.getElementById('importProgressBox');
+  const bar = document.getElementById('importProgressBar');
+  const txt = document.getElementById('importProgressText');
+  const pct = document.getElementById('importProgressPercent');
+  const det = document.getElementById('importProgressDetail');
+  const btn = document.getElementById('btnImportarArchivo');
+
+  function setProgress(percent,message,detail){
+    const p = Math.max(0,Math.min(100,Math.round(percent||0)));
+    if(box) box.style.display='block';
+    if(bar) bar.style.width=p+'%';
+    if(txt) txt.textContent=message||'Procesando...';
+    if(pct) pct.textContent=p+'%';
+    if(det) det.textContent=detail||'';
+  }
+
+  try{
+    if(result) result.innerHTML='';
+    if(!file){
+      alert('Seleccione un archivo XLS, XLSX o CSV');
+      return;
+    }
+    if(btn){btn.disabled=true;btn.textContent='Procesando...';}
+    setProgress(5,'Leyendo archivo','Archivo seleccionado: '+file.name);
+
+    if(!window.XLSX){
+      setProgress(100,'No se pudo importar','No se cargó la librería XLSX. Verifique conexión a Internet.');
+      if(result) result.innerHTML='<div class="note"><strong>Error:</strong> No se cargó la librería XLSX. Verifique conexión a Internet y vuelva a intentar.</div>';
+      return;
+    }
+
+    const buf = await file.arrayBuffer();
+    setProgress(18,'Interpretando XLS/XLSX','Leyendo la primera hoja del archivo.');
+    const wb = XLSX.read(buf,{type:'array'});
+    if(!wb.SheetNames || !wb.SheetNames.length) throw new Error('El archivo no tiene hojas para importar.');
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
+    if(!rows.length){
+      setProgress(100,'Archivo vacío','No se encontraron filas con datos.');
+      if(result) result.innerHTML='<div class="note"><strong>Archivo vacío:</strong> no se encontraron filas con datos para importar.</div>';
+      return;
+    }
+
+    setProgress(25,'Validando datos','Filas encontradas: '+rows.length);
+    let ok=0, err=[], omitidas=0;
+    for(const [i,r] of rows.entries()){
+      const filaExcel = i+2;
+      let row = normalizarFilaImportacion(table,r);
+      let faltante = '';
+      if(table==='estudiantes' && (!row.cedula||!row.nombre)) faltante='faltan CEDULA o NOMBRE';
+      if(table==='profesores' && (!row.cedula||!row.nombres||!row.apellidos)) faltante='faltan cedula, nombres o apellidos';
+      if(table==='maestrias' && !row.nombre) faltante='falta nombre de maestría';
+      if(faltante){
+        err.push('Fila '+filaExcel+': '+faltante);
+        omitidas++;
+      }else{
+        try{
+          await insert(table,row);
+          ok++;
+        }catch(e){
+          err.push('Fila '+filaExcel+': '+(e.message||e));
+        }
+      }
+      const progress = 25 + ((i+1)/rows.length)*68;
+      setProgress(progress,'Importando registros','Procesados '+(i+1)+' de '+rows.length+' | Correctos: '+ok+' | Errores: '+err.length);
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+
+    setProgress(96,'Registrando auditoría','Guardando resumen de importación.');
+    try{ await audit('importar',table,'Importados '+ok+' registros desde XLS/XLSX/CSV'); }catch(e){}
+    setProgress(100,'Importación finalizada','Correctos: '+ok+' | Omitidos/errores: '+err.length);
+    if(result){
+      result.innerHTML=`<div class="note" style="border-left-color:${err.length?'var(--tomate)':'var(--verde)'}">
+        <strong>Resultado de importación</strong><br>
+        Registros leídos: ${rows.length}<br>
+        Registros importados: ${ok}<br>
+        Registros omitidos/con error: ${err.length}
+      </div>${err.length?'<div class="note"><strong>Detalle de errores:</strong><br>'+err.slice(0,80).join('<br>')+(err.length>80?'<br>...':'')+'</div>':''}
+      <div class="toolbar"><button class="btn btn-primary" onclick="location.reload()">Actualizar listado</button></div>`;
+    }
+  }catch(e){
+    console.error(e);
+    setProgress(100,'Error en la importación',e.message||String(e));
+    if(result) result.innerHTML='<div class="note"><strong>Error:</strong> '+(e.message||e)+'</div>';
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='📤 Importar archivo';}
+  }
+}
 
 async function lookup(){ const [est,prof,tem,def,jur,cal]=await Promise.all(['estudiantes','profesores','temas','defensas','defensa_jurados','calificaciones'].map(all)); return {est,prof,tem,def,jur,cal}; }
 
