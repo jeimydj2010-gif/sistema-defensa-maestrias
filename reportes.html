@@ -20,6 +20,18 @@
 .chart-box{min-height:260px}.chart-title{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px}.chart-title h2{margin:0}.chart-svg{width:100%;height:260px;display:block}.chart-legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}.legend-item{font-size:12px;font-weight:700;color:#374151}.dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:5px}.bar-row{display:grid;grid-template-columns:135px 1fr 45px;gap:10px;align-items:center;margin:10px 0}.bar-bg{height:18px;background:#eef2f2;border-radius:999px;overflow:hidden}.bar-fill{height:18px;background:linear-gradient(90deg,#006068,#00CE7C);border-radius:999px}.empty-state{padding:28px;border:1px dashed var(--borde);border-radius:14px;background:#fbfdfd;color:var(--plomo);text-align:center}
 @media(max-width:900px){.bar-row{grid-template-columns:1fr}.module-table td{display:block}.module-table tr{display:block;border-bottom:1px solid #edf2f1}}
 @media print{@page{size:auto;margin:12mm}.table-wrap{overflow:visible}table{font-size:11px;min-width:0;width:100%}th,td{padding:6px;word-break:break-word}.content{padding:0}.chart-svg{height:210px}}
+
+/* Ajuste compacto de tablas institucionales */
+.table-wrap{overflow-x:auto}
+.table-compact th,.table-compact td{font-size:12.5px;padding:8px 10px;vertical-align:middle;line-height:1.25}
+.table-compact .acciones,.table-compact td:last-child{white-space:nowrap}
+.table-compact .btn{padding:7px 10px;font-size:12px;border-radius:9px;margin:2px}
+.table-compact .badge{font-size:11px;padding:5px 8px}
+.table-compact .cell-limit{max-width:230px;white-space:normal;word-break:break-word}
+.table-compact .cell-short{max-width:130px;white-space:normal;word-break:break-word}
+.table-compact .cell-center{text-align:center}
+@media(max-width:1200px){.table-compact th,.table-compact td{font-size:11.5px;padding:7px 8px}.table-compact .btn{padding:6px 8px;font-size:11px}}
+
 </style><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script>
 // Configuracion Supabase
 // 1) Cree el proyecto en Supabase
@@ -135,7 +147,7 @@ function setPrintOrientation(tipo){document.body.classList.remove('print-portrai
 function modal(title,html){closeModal();document.body.insertAdjacentHTML('beforeend',`<div class="modal" id="modal"><div class="modal-card"><div class="modal-head"><h2>${title}</h2><button class="close" type="button" onclick="closeModal()">×</button></div>${html}</div></div>`)}
 function closeModal(){const m=document.getElementById('modal');if(!m)return;try{if(m.parentNode){m.parentNode.removeChild(m)}}catch(e){m.style.display='none';m.id='modal_cerrado_'+Date.now();}}
 function getVal(id){return document.getElementById(id).value.trim()}
-async function renderCrud({table,title,fields,columns}){ if(!requireAdmin()) return; const app=document.getElementById('app'); try{ const data=await all(table); const importBtns=(['estudiantes','profesores','maestrias'].includes(table))?`<button class="btn btn-success" onclick="openImportModal('${table}')">📤 Importar XLS/XLSX</button><button class="btn btn-outline" onclick="descargarModelo('${table}')">📄 Descargar modelo</button>`:''; app.innerHTML=`<div class="card"><div class="toolbar"><button class="btn btn-primary" onclick="openCrud('${table}')">➕ Nuevo</button>${importBtns}<button class="btn btn-outline" onclick="exportTable('${table}')">📥 Exportar CSV</button><input id="buscar" placeholder="Buscar..." oninput="filterTable()"></div><div class="table-wrap"><table id="mainTable"><thead><tr>${columns.map(c=>`<th>${c.label}</th>`).join('')}<th>Estado</th><th>Acciones</th></tr></thead><tbody>${data.length?data.map(r=>`<tr>${columns.map(c=>`<td>${c.render?c.render(r):r[c.key]??''}</td>`).join('')}<td>${badge(r.estado||'activo',(r.estado||'activo')==='activo'?'ok':'warn')}</td><td><button class="btn btn-secondary" onclick="openCrud('${table}',${r.id})">✏️ Editar</button> <button class="btn btn-danger" onclick="del('${table}',${r.id})">🗑️ Eliminar</button></td></tr>`).join(''):`<tr><td colspan="${columns.length+2}"><div class="empty-state">No existen registros todavía. Use el botón Nuevo o Importar XLS/XLSX.</div></td></tr>`}</tbody></table></div></div>`; window.__crud={table,title,fields,columns,data}; }catch(e){ console.error(e); app.innerHTML=`<div class="card"><h2>${title}</h2><div class="note"><strong>No se pudo cargar el módulo ${title}.</strong><br>${e.message||e}<br><br>Verifique que la tabla exista en Supabase y que haya ejecutado el SQL de actualización correspondiente.</div><div class="toolbar"><button class="btn btn-primary" onclick="location.reload()">🔄 Reintentar</button></div></div>`; }}
+async function renderCrud({table,title,fields,columns}){ if(!requireAdmin()) return; const app=document.getElementById('app'); try{ const data=await all(table); const importBtns=(['estudiantes','profesores','maestrias'].includes(table))?`<button class="btn btn-success" onclick="openImportModal('${table}')">📤 Importar XLS/XLSX</button><button class="btn btn-outline" onclick="descargarModelo('${table}')">📄 Descargar modelo</button>`:''; app.innerHTML=`<div class="card"><div class="toolbar"><button class="btn btn-primary" onclick="openCrud('${table}')">➕ Nuevo</button>${importBtns}<button class="btn btn-outline" onclick="exportTable('${table}')">📥 Exportar CSV</button><input id="buscar" placeholder="Buscar..." oninput="filterTable()"></div><div class="table-wrap"><table id="mainTable" class="table-compact"><thead><tr>${columns.map(c=>`<th>${c.label}</th>`).join('')}<th>Estado</th><th>Acciones</th></tr></thead><tbody>${data.length?data.map(r=>`<tr>${columns.map(c=>`<td class="${['correo','correo_institucional','correo_personal','carrera','programa','nombre','nombres','apellidos','tema'].includes(c.key)?'cell-limit':['cedula','telefono','celular','whatsapp','nivel','tipo','periodo','estado_acceso'].includes(c.key)?'cell-short cell-center':''}">${c.render?c.render(r):r[c.key]??''}</td>`).join('')}<td>${badge(r.estado||'activo',(r.estado||'activo')==='activo'?'ok':'warn')}</td><td><button class="btn btn-secondary" onclick="openCrud('${table}',${r.id})">✏️ Editar</button> <button class="btn btn-danger" onclick="del('${table}',${r.id})">🗑️ Eliminar</button></td></tr>`).join(''):`<tr><td colspan="${columns.length+2}"><div class="empty-state">No existen registros todavía. Use el botón Nuevo o Importar XLS/XLSX.</div></td></tr>`}</tbody></table></div></div>`; window.__crud={table,title,fields,columns,data}; }catch(e){ console.error(e); app.innerHTML=`<div class="card"><h2>${title}</h2><div class="note"><strong>No se pudo cargar el módulo ${title}.</strong><br>${e.message||e}<br><br>Verifique que la tabla exista en Supabase y que haya ejecutado el SQL de actualización correspondiente.</div><div class="toolbar"><button class="btn btn-primary" onclick="location.reload()">🔄 Reintentar</button></div></div>`; }}
 window.openCrud=async function(table,id=null){ const cfg=window.__crud; const row=id?cfg.data.find(x=>String(x.id)===String(id)):{}; const html=`<form onsubmit="saveCrud(event,'${table}',${id||'null'})"><div class="grid grid-2">${cfg.fields.map(f=>`<div class="form-group"><label>${f.label}</label>${f.type==='textarea'?`<textarea id="f_${f.key}">${row[f.key]||''}</textarea>`:`<input id="f_${f.key}" type="${f.type||'text'}" value="${row[f.key]||''}">`}</div>`).join('')}</div><button class="btn btn-primary">Guardar</button></form>`; modal(id?'Editar registro':'Nuevo registro',html); }
 window.saveCrud=async function(e,table,id){ e.preventDefault(); const cfg=window.__crud; const row={}; cfg.fields.forEach(f=>row[f.key]=getVal('f_'+f.key)); if(id){await update(table,id,row); await audit('editar',table,'Edito registro '+id)}else{await insert(table,row); await audit('crear',table,'Creo registro')} location.reload(); }
 window.del=async function(table,id){ if(confirm('Desea eliminar este registro?')){ await removeRow(table,id); await audit('eliminar',table,'Elimino registro '+id); location.reload(); }}
@@ -174,6 +186,50 @@ function normalizarFilaImportacion(table,r){
  }
  return r;
 }
+
+function importKeyForTable(table,row){
+  if(table==='estudiantes') return row.cedula ? {field:'cedula', value:String(row.cedula).trim()} : null;
+  if(table==='profesores') return row.cedula ? {field:'cedula', value:String(row.cedula).trim()} : null;
+  if(table==='maestrias'){
+    if(row.codigo) return {field:'codigo', value:String(row.codigo).trim()};
+    if(row.nombre) return {field:'nombre', value:String(row.nombre).trim()};
+  }
+  return null;
+}
+function isEmptyImportValue(v){
+  return v===undefined || v===null || String(v).trim()==='';
+}
+async function findExistingImportRow(table,row){
+  const key = importKeyForTable(table,row);
+  if(!key) return null;
+  if(supabaseClient){
+    const {data,error}=await supabaseClient.from(table).select('*').eq(key.field,key.value).limit(1);
+    if(error) throw error;
+    return data && data.length ? data[0] : null;
+  }
+  const d=loadLocal();
+  return (d[table]||[]).find(x=>String(x[key.field]||'').trim()===String(key.value).trim()) || null;
+}
+async function upsertImportRow(table,row){
+  const existing = await findExistingImportRow(table,row);
+  if(existing && existing.id){
+    const patch = {};
+    Object.keys(row).forEach(k=>{
+      const incoming = row[k];
+      if(!isEmptyImportValue(incoming) && isEmptyImportValue(existing[k])){
+        patch[k]=incoming;
+      }
+    });
+    if(Object.keys(patch).length){
+      await update(table, existing.id, patch);
+      return {status:'actualizado', id:existing.id, campos:Object.keys(patch).length};
+    }
+    return {status:'sin_cambios', id:existing.id, campos:0};
+  }
+  await insert(table,row);
+  return {status:'nuevo', id:null, campos:Object.keys(row).length};
+}
+
 function descargarModelo(table){ const headers=MODELOS_IMPORTACION[table]||[]; let ejemplo=[]; if(table==='estudiantes') ejemplo=['1720000001','NOMBRE COMPLETO DEL ESTUDIANTE','estudiante@cordillera.edu.ec','personal@gmail.com','0999999999','0999999999','MAESTRIA TECNOLOGICA EN DESARROLLO E INNOVACION DIGITAL EN LOS NEGOCIOS','I','NUEVO','2026-2026']; else if(table==='profesores') ejemplo=['1711111111','NOMBRES','APELLIDOS','docente@cordillera.edu.ec','0999999999','Mgtr.','activo','activo']; else if(table==='maestrias') ejemplo=['Maestría Tecnológica en Desarrollo e Innovación Digital en los Negocios','MT-DIDN','activo']; csvDownload('modelo_'+table+'.csv',[headers,ejemplo]); }
 window.openImportModal = function(table){
   const headers = MODELOS_IMPORTACION[table] || [];
@@ -245,7 +301,7 @@ window.procesarImportacion = async function(table){
     }
 
     setProgress(25,'Validando datos','Filas encontradas: '+rows.length);
-    let ok=0, err=[], omitidas=0;
+    let ok=0, err=[], omitidas=0, nuevos=0, actualizados=0, sinCambios=0;
     for(const [i,r] of rows.entries()){
       const filaExcel = i+2;
       let row = normalizarFilaImportacion(table,r);
@@ -258,25 +314,30 @@ window.procesarImportacion = async function(table){
         omitidas++;
       }else{
         try{
-          await insert(table,row);
-          ok++;
+          const rImport = await upsertImportRow(table,row);
+          if(rImport.status==='nuevo'){ nuevos++; ok++; }
+          else if(rImport.status==='actualizado'){ actualizados++; ok++; }
+          else { sinCambios++; ok++; }
         }catch(e){
           err.push('Fila '+filaExcel+': '+(e.message||e));
         }
       }
       const progress = 25 + ((i+1)/rows.length)*68;
-      setProgress(progress,'Importando registros','Procesados '+(i+1)+' de '+rows.length+' | Correctos: '+ok+' | Errores: '+err.length);
+      setProgress(progress,'Importando registros','Procesados '+(i+1)+' de '+rows.length+' | Nuevos: '+nuevos+' | Actualizados: '+actualizados+' | Sin cambios: '+sinCambios+' | Errores: '+err.length);
       await new Promise(resolve=>setTimeout(resolve,0));
     }
 
     setProgress(96,'Registrando auditoría','Guardando resumen de importación.');
-    try{ await audit('importar',table,'Importados '+ok+' registros desde XLS/XLSX/CSV'); }catch(e){}
-    setProgress(100,'Importación finalizada','Correctos: '+ok+' | Omitidos/errores: '+err.length);
+    try{ await audit('importar',table,'Importación XLS/XLSX/CSV. Nuevos: '+nuevos+', actualizados: '+actualizados+', sin cambios: '+sinCambios); }catch(e){}
+    setProgress(100,'Importación finalizada','Nuevos: '+nuevos+' | Actualizados: '+actualizados+' | Sin cambios: '+sinCambios+' | Omitidos/errores: '+err.length);
     if(result){
       result.innerHTML=`<div class="note" style="border-left-color:${err.length?'var(--tomate)':'var(--verde)'}">
         <strong>Resultado de importación</strong><br>
         Registros leídos: ${rows.length}<br>
-        Registros importados: ${ok}<br>
+        Registros procesados correctamente: ${ok}<br>
+        Nuevos creados: ${nuevos}<br>
+        Existentes actualizados: ${actualizados}<br>
+        Existentes sin cambios: ${sinCambios}<br>
         Registros omitidos/con error: ${err.length}
       </div>${err.length?'<div class="note"><strong>Detalle de errores:</strong><br>'+err.slice(0,80).join('<br>')+(err.length>80?'<br>...':'')+'</div>':''}
       <div class="toolbar"><button class="btn btn-primary" onclick="location.reload()">Actualizar listado</button></div>`;
@@ -293,6 +354,6 @@ window.procesarImportacion = async function(table){
 async function lookup(){ const [est,prof,tem,def,jur,cal]=await Promise.all(['estudiantes','profesores','temas','defensas','defensa_jurados','calificaciones'].map(all)); return {est,prof,tem,def,jur,cal}; }
 
 </script></head><body><script>pageShell('Reportes')</script><script>
-(async()=>{requireAdmin();const {est,prof,tem,def,jur,cal}=await lookup();function e(id){return est.find(x=>String(x.id)===String(id))||{}}function t(id){return tem.find(x=>String(x.id)===String(id))||{}}const rows=def.map(d=>{let ee=e(d.estudiante_id),tt=t(d.tema_id);return [ee.cedula,ee.nombres+' '+ee.apellidos,ee.programa,ee.cohorte,tt.tema,d.fecha_defensa,d.estado,d.nota_final?money(d.nota_final):'',d.estado_final||'']});app.innerHTML=`<div class="card"><div class="toolbar"><input id="buscar" placeholder="Filtrar reporte..." oninput="filterTable()"><button class="btn btn-outline" onclick="csvDownload('reporte_defensas.csv', [['Cedula','Estudiante','Programa','Cohorte','Tema','Fecha','Estado defensa','Nota final','Resultado'],...window.reporteRows])">📥 Excel/CSV</button><button class="btn btn-primary" onclick="setPrintOrientation('portrait')">🖨️ PDF vertical</button><button class="btn btn-secondary" onclick="setPrintOrientation('landscape')">🖨️ PDF horizontal</button></div><div class="table-wrap reporte-print"><table id="mainTable"><thead><tr><th>Cédula</th><th>Estudiante</th><th>Programa</th><th>Cohorte</th><th>Tema</th><th>Fecha</th><th>Estado</th><th>Nota</th><th>Resultado</th></tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;window.reporteRows=rows;})();
+(async()=>{requireAdmin();const {est,prof,tem,def,jur,cal}=await lookup();function e(id){return est.find(x=>String(x.id)===String(id))||{}}function t(id){return tem.find(x=>String(x.id)===String(id))||{}}const rows=def.map(d=>{let ee=e(d.estudiante_id),tt=t(d.tema_id);return [ee.cedula,ee.nombres+' '+ee.apellidos,ee.programa,ee.cohorte,tt.tema,d.fecha_defensa,d.estado,d.nota_final?money(d.nota_final):'',d.estado_final||'']});app.innerHTML=`<div class="card"><div class="toolbar"><input id="buscar" placeholder="Filtrar reporte..." oninput="filterTable()"><button class="btn btn-outline" onclick="csvDownload('reporte_defensas.csv', [['Cedula','Estudiante','Programa','Cohorte','Tema','Fecha','Estado defensa','Nota final','Resultado'],...window.reporteRows])">📥 Excel/CSV</button><button class="btn btn-primary" onclick="setPrintOrientation('portrait')">🖨️ PDF vertical</button><button class="btn btn-secondary" onclick="setPrintOrientation('landscape')">🖨️ PDF horizontal</button></div><div class="table-wrap reporte-print"><table id="mainTable" class="table-compact"><thead><tr><th>Cédula</th><th>Estudiante</th><th>Programa</th><th>Cohorte</th><th>Tema</th><th>Fecha</th><th>Estado</th><th>Nota</th><th>Resultado</th></tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;window.reporteRows=rows;})();
 
 </script></body></html>
